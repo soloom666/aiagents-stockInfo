@@ -1,32 +1,35 @@
 version: '3.8'
 
 services:
-  agentsstock:
+  streamlit-app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: agentsstock1
+    container_name: aiagents-stockinfo
     ports:
-      - "8503:8503"
+      - "8501:8501"
     volumes:
-      # 数据和数据库持久化 - 使用目录挂载而不是文件挂载
+      # 挂载数据目录，持久化数据
       - ./data:/app/data
-      # 环境变量配置文件
-      - ./.env:/app/.env
+      - ./log:/app/log
+      - ./config:/app/config
     environment:
-      # 可以在这里设置环境变量，或者使用.env文件
+      # 设置环境变量
       - TZ=Asia/Shanghai
+      - PYTHONPATH=/app
     restart: unless-stopped
     networks:
-      - agentsstock-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8503/_stcore/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+      - stock-network
+    # 资源限制（可选）
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
 
 networks:
-  agentsstock-network:
+  stock-network:
     driver: bridge
-

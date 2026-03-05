@@ -1,7 +1,7 @@
 import openai
 import json
 from typing import Dict, List, Any, Optional
-import config as config
+import configs as config
 
 
 class DeepSeekClient:

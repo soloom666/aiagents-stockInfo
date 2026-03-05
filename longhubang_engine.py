@@ -152,7 +152,7 @@ class LonghubangEngine:
             #  智瞰龙虎榜-提取推荐股票: 高风险警示股上段推荐股
             longhuban_recommended_stocks = extract_stock_codes(split_text(chief_result['analysis'], split_char='高风险警示股', line_up=True))
             print(f"智瞰龙虎-AI推荐分析师报告-次日重点推荐股票 longhuban_recommended_stocks: {longhuban_recommended_stocks}")
-            ReadFile.replase_json_data('D:\\D_disk\\project\\code\\pythonCode\\pythonProject\\stockProject\\aitrader\\data\\output\\json\\al_agent_stock_program.json',
+            ReadFile.replase_json_data('E:\\project\\Python project\\platform\\aitrader\\data\\output\\json\\al_agent_stock_program.json',
                 longhuban_recommended_stocks)
 
 

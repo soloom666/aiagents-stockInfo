@@ -1,11 +1,10 @@
 import json
-import time
-
 import pandas as pd
 import os
+from common.logger import logger
 import yaml
-from mcp.server.fastmcp.server import logger
-from tushare import new_stocks
+
+
 
 BASE_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
@@ -30,7 +29,7 @@ class ReadFile:
         return file_path
 
 
-    def read_json(file_path_name=getProjectPath() + '\\config\\config.json'):
+    def read_json(file_path_name=getProjectPath() + '/config/config.json'):
         with open(file_path_name, encoding='utf-8') as f:
             com = f.read()
         confJson = json.loads(com)
@@ -50,16 +49,25 @@ class ReadFile:
             df = pd.read_table(file_path_name, sep=None, encoding='utf-8', engine='python')  # 修改sep参数为None
         return df
 
+
+    def read_xls_data(file_path):
+            """
+            读取 xls 文件中的所有工作表
+            """
+            file_path_name = BASE_PATH + file_path
+            all_sheets = pd.read_excel(file_path_name, sheet_name=None)
+            return all_sheets
+
+
     def read_fileNosheet(file_path, file_type='csv'):
         file_path_name = BASE_PATH + file_path
         if file_type=='csv':
             # df=pd.read_csv(file_path_name, encoding='utf-8')
             df = pd.read_csv(file_path_name.replace('\\', '/'), dtype=str, engine='openpyxl')
         elif file_type=='xlsx':
-            # df = pd.read_excel(file_path_name, encoding='utf-8')
             df = pd.read_excel(file_path_name.replace('\\', '/'), dtype=str, engine='openpyxl')
-        # elif file_type=='xls':
-        #     pd.read_excel(file_path_name.replace('\\', '/'), dtype=str)
+        # elif file_type == 'xls':
+        #     df = pd.read_excel(file_path_name.replace('\\', '/'), dtype=str, engine='xlrd')
         elif file_type=='txt':
             # df = pd.read_table(file_path_name, sep='\t', encoding='utf-8')
             df = pd.read_table(file_path_name, sep=None, encoding='utf-8', engine='python')  # 修改sep参数为None
@@ -106,32 +114,6 @@ class ReadFile:
             logger.info(f"输入mode有误：{mode}")
 
 
-    def replase_json_data(file_path, new_stocks, key='longhuban_stocks'):
-        """
-        替换 JSON 文件中的 龙虎榜跟主力选股数据
-        """
-        # 读取现有 JSON 数据
-        with open(file_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        if key == 'longhuban_stocks' and new_stocks != []:  # 判断是否为空
-            # 更新 longhuban_stocks 字段
-            longhuban_stocks = [str(stock) for stock in new_stocks]
-            data['longhuban_stocks'] = longhuban_stocks
-        elif key == 'main_stocks':
-            if all(not value for value in new_stocks.values()):
-                logger.info("new_stocks['main_stocks'] 字典的所有值都是空,没有需要处理的数据")
-                return
-            else:
-                data['main_stocks'] = new_stocks               # 更新 main_stocks 字段
-        else:
-            logger.info(f"替换json内容的key有误：{key}")
-        data['time'] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        # 写回文件
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"更新json字段内容成功！")
-
-
     def initResultExcel(filePath, data=['time','strategy', 'stock','buy_or_sell','price','runResult','推荐结果']):
         #初始化文件
         # filePath = BASE_PATH + filePath
@@ -160,6 +142,81 @@ class ReadFile:
         df = pd.DataFrame(datas)
         with pd.ExcelWriter(path=filePath, mode='a', if_sheet_exists='overlay') as writer:
                 df.to_excel(writer, sheet_name='Sheet1', index=False, header=False, startrow=writer.sheets['Sheet1'].max_row)
+
+    def get_AI_json_stocks(jsonFile= '\\aitrader\\data\\output\\json\\al_agent_stock_program.json'):
+        # 获取json文件所有stocks数据
+        al_agent_stocks = ReadFile.operJson(jsonFile, 'r')
+
+        main_stocks = al_agent_stocks['main_stocks']
+        main_fundFlow__codes = main_stocks['fund_flow_analysis_codes']
+        main_industry_analysis_codes = main_stocks['industry_analysis_codes']
+        main_fundamental_analysis_codes = main_stocks['fundamental_analysis_codes']
+        longhuban_stocks = al_agent_stocks['longhuban_stocks']
+
+        def _to_list(val):
+            """将字符串或其他类型统一转为列表"""
+            if isinstance(val, list):
+                return val
+            if isinstance(val, str):
+                return [v.strip() for v in val.split(',') if v.strip()]
+            return list(val) if val else []
+
+        # 1、合并并去重所有股票代码
+        all_codes = list(dict.fromkeys(
+            _to_list(main_fundFlow__codes) +
+            _to_list(main_industry_analysis_codes) +
+            _to_list(main_fundamental_analysis_codes) +
+            _to_list(longhuban_stocks)
+        ))
+        print(f'合并并去重所有股票代码:{all_codes}')
+        return all_codes, al_agent_stocks
+
+    def appendDatasToExcel(datas, filePath='\\aitrader\\data\\input\\myStock\\我的自选.xlsx', remove_duplicates=True):
+        """
+        将数据追加到Excel文件的第一列，并去重
+        Args:
+            datas (list): 要追加的数据列表
+            filePath (str): Excel文件路径
+            remove_duplicates (bool): 是否去除重复项
+        """
+        full_path = BASE_PATH + filePath
+
+        # 检查Excel文件是否存在
+        if os.path.exists(full_path):
+            # 读取现有Excel数据
+            try:
+                existing_df = pd.read_excel(full_path)
+                # 确保第一列名为'股票代码'
+                if existing_df.shape[1] > 0:
+                    existing_df.columns = ['股票代码'] + list(existing_df.columns[1:])
+                else:
+                    existing_df = pd.DataFrame(columns=['股票代码'])
+            except Exception as e:
+                logger.error(f"读取现有Excel文件失败: {e}")
+                existing_df = pd.DataFrame(columns=['股票代码'])
+        else:
+            # 如果文件不存在，创建新的DataFrame
+            existing_df = pd.DataFrame(columns=['股票代码'])
+
+        # 将新数据转换为DataFrame
+        if isinstance(datas, list):
+            new_df = pd.DataFrame(datas, columns=['股票代码'])
+        else:
+            new_df = pd.DataFrame([datas], columns=['股票代码'])
+
+        # 合并现有数据和新数据
+        combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+
+        if remove_duplicates:
+            # 去重，保持顺序
+            combined_df = combined_df.drop_duplicates(subset=['股票代码'], keep='first')
+
+        # 保存到Excel文件，确保数据在第一列
+        try:
+            combined_df.to_excel(full_path, index=False)
+            logger.info(f"成功将 {len(new_df)} 条数据追加到 {full_path} 第一列，去重后总数据量: {len(combined_df)}")
+        except Exception as e:
+            logger.error(f"保存Excel文件失败: {e}")
 
 
     def golden_resultToExcel(context, order, strategy, filePath):
@@ -231,8 +288,49 @@ class ReadFile:
                         startrow=writer.sheets['Sheet1'].max_row)
 
 
+
+    def replase_json_data(json_file_path, json_data):
+        """
+        替换JSON文件中的数据
+        :param json_file_path: JSON文件路径（完整路径）
+        :param json_data: 要替换的数据（dict），只更新其中包含的键
+        :return:
+        """
+        try:
+            with open(json_file_path, mode='r', encoding='utf-8') as f:
+                existing_data = json.load(f)
+                print(f"存在数据：{existing_data}")
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            logger.error(f"读取JSON文件失败: {json_file_path}, 错误: {e}")
+            return
+
+
+        if  'main_stocks' in json_data:
+            existing_data['main_stocks'] = json_data
+            with open(json_file_path, mode='w', encoding='utf-8') as f:
+                f.write(json.dumps(existing_data, indent=4, ensure_ascii=False))
+            print(f"main_stocks 已更新JSON文件：{existing_data}")
+        elif 'longhuban_stocks' in json_data:
+            existing_data['longhuban_stocks'] = json_data
+            with open(json_file_path, mode='w', encoding='utf-8') as f:
+                f.write(json.dumps(existing_data, indent=4, ensure_ascii=False))
+            print(f"longhuban_stocks 已更新JSON文件：{existing_data}")
+        else:
+            logger.error(f"JSON数据中不存在 'main_stocks' 或 'longhuban_stocks' 键")
+
+
+
+
+
 if __name__ == '__main__':
-    # ReadFile.getFilePath_addProjectPath("/datas/output/selfChooseStockResult/selfChooseStock.xlsx")
-    # longhuban_stocks = ['000221', '600579', '600580', '600581', '600582', '600583']
-    # ReadFile.replase_json_data('D:\\D_disk\\project\\code\\pythonCode\\pythonProject\\stockProject\\aitrader\\data\\output\\json\\al_agent_stock_program.json',longhuban_stocks, 'main_stocks')
-    pass
+    # ReadFile.getFilePath_addProjectPath("/aitrader/datas/output/selfChooseStockResult/selfChooseStock.xlsx")
+
+    main_stocks = {'main_stocks': {
+	"fund_flow_analysis_codes": "000001",
+	"industry_analysis_codes": "000002",
+	"fundamental_analysis_codes": "000003"
+    }
+    }
+    ReadFile.replase_json_data(
+        'E:\\project\\Python project\\platform\\aiagents-stockInfo\\aitrader\\data\\output\\json\\al_agent_stock_program.json',
+        main_stocks)

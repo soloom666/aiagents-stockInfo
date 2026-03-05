@@ -69,11 +69,11 @@ class LonghubangDataFetcher:
     
     def get_longhubang_data(self, date):
         """
-        获取指定日期的龙虎榜数据
-        
+        获取指定日期的龙虎榜数据，主数据源失败时自动切换到 akshare 备用数据源
+
         Args:
             date: 日期，格式为 YYYY-MM-DD，如 "2023-03-21"
-            
+
         Returns:
             dict: 龙虎榜数据
         """
@@ -86,8 +86,48 @@ class LonghubangDataFetcher:
         if result and result.get('data'):
             print(f"    ✓ 成功获取 {len(result['data'])} 条龙虎榜记录")
             return result
-        else:
-            print(f"    ✗ 未获取到数据")
+
+        print(f"    ✗ 主数据源未获取到数据，尝试 akshare 备用数据源...")
+        return self._get_akshare_longhubang_data(date)
+
+    def _get_akshare_longhubang_data(self, date):
+        """
+        通过 akshare（东方财富）获取指定日期的龙虎榜数据
+
+        Args:
+            date: 日期，格式为 YYYY-MM-DD
+
+        Returns:
+            dict: 与主数据源格式一致的龙虎榜数据，失败返回 None
+        """
+        try:
+            import akshare as ak
+            # akshare 日期格式为 YYYYMMDD
+            date_ak = date.replace('-', '')
+            print(f"    [akshare] 请求东方财富龙虎榜数据，日期: {date_ak}")
+            df = ak.stock_lhb_detail_em(date=date_ak)
+            if df is None or df.empty:
+                print(f"    [akshare] 未获取到 {date} 的数据")
+                return None
+
+            records = []
+            for _, row in df.iterrows():
+                records.append({
+                    'gpdm': str(row.get('代码', '')),
+                    'gpmc': str(row.get('名称', '')),
+                    'mrje': row.get('买入额', 0),
+                    'mcje': row.get('卖出额', 0),
+                    'jlrje': row.get('净额', 0),
+                    'yyb': str(row.get('买入营业部名称', '')),
+                    'yzmc': str(row.get('买入营业部名称', '')),
+                    'sblx': str(row.get('上榜原因', '')),
+                    'rq': date,
+                    'gl': '',
+                })
+            print(f"    [akshare] ✓ 成功获取 {len(records)} 条龙虎榜记录")
+            return {'data': records}
+        except Exception as e:
+            print(f"    [akshare] 获取数据失败: {e}")
             return None
     
     def get_longhubang_data_range(self, start_date, end_date):
@@ -126,21 +166,46 @@ class LonghubangDataFetcher:
     
     def get_recent_days_data(self, days=5):
         """
-        获取最近N个交易日的龙虎榜数据
-        
+        获取最近N个交易日的龙虎榜数据，主数据源无数据时自动切换到 akshare 备用数据源
+
         Args:
             days: 天数（默认5天）
-            
+
         Returns:
             list: 龙虎榜数据列表
         """
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days * 2)  # 乘以2以确保包含足够的交易日
-        
-        return self.get_longhubang_data_range(
+
+        data_list = self.get_longhubang_data_range(
             start_date.strftime('%Y-%m-%d'),
             end_date.strftime('%Y-%m-%d')
         )
+
+        if data_list:
+            return data_list
+
+        # 主数据源全部失败，使用 akshare 对每个交易日逐日补充
+        print("[智瞰龙虎] 主数据源无数据，切换到 akshare 备用数据源获取最近数据...")
+        all_data = []
+        current = end_date
+        trading_days_found = 0
+        checked_days = 0
+        max_check = days * 3  # 最多向前检查 days*3 个日历日，以覆盖节假日
+
+        while trading_days_found < days and checked_days < max_check:
+            if current.weekday() < 5:  # 跳过周末
+                date_str = current.strftime('%Y-%m-%d')
+                result = self._get_akshare_longhubang_data(date_str)
+                if result and result.get('data'):
+                    all_data.extend(result['data'])
+                    trading_days_found += 1
+                time.sleep(self.request_delay)
+            current -= timedelta(days=1)
+            checked_days += 1
+
+        print(f"[智瞰龙虎] akshare 共获取 {len(all_data)} 条记录")
+        return all_data
     
     def parse_to_dataframe(self, data_list):
         """

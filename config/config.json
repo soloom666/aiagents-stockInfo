@@ -1,0 +1,27 @@
+{
+    "开始时间":"20250601",
+    "结束时间":"",
+    "运行天数":30,
+    "股票代码":"002415",
+    "股票代码列表":["600839", "002415"],
+    "初始资金":1000000,
+    "golden_token":"932969c76f353ce405ba22b6f5e6d542ec0ac981",
+    "tushare_token":"441f8995667a55e237cc0d6d700e62d50291b1e8a52eb22eb9454436",
+    "deepseek_api_key":"sk-77902ade1c6442a59165a3cec72c3524",
+    "base_url":"https://api.deepseek.com",
+    "PUSHPLUS_TOKEN": "your_pushplus_token",
+    "EMAIL_CONFIG": {
+        "sender": "your_email@qq.com",
+        "password": "smtp_authorization_code",
+        "smtp_server": "smtp.qq.com",
+        "port": 587,
+        "receiver": "target@example.com"
+    },
+    "MONITOR_INTERVAL": 30,
+    "PROXY_CONFIG": {
+        "enable": false,
+        "http_proxy": "http://127.0.0.1:7890",
+        "https_proxy": "http://127.0.0.1:7890",
+        "socks_proxy": "socks5://127.0.0.1:7890"
+    }
+}

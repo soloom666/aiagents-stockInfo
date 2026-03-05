@@ -9,9 +9,11 @@ import plotly.express as px
 import pandas as pd
 from datetime import datetime, timedelta
 import time
-
 from longhubang_engine import LonghubangEngine
 from longhubang_pdf import LonghubangPDFGenerator
+from aitrader.a_self_Strategy.ai_analysis.ai_analysis_run import AiAnalysis
+
+
 
 
 def display_longhubang():
@@ -156,9 +158,15 @@ def display_analysis_tab():
                 del st.session_state.longhubang_result
             st.success("已清除分析结果")
             st.rerun()
-    
+    with col3:
+        long_button = st.button("🐉 寻龙记", type="primary", width='stretch')
+
     st.markdown("---")
-    
+
+    # 寻龙分析
+    if long_button:
+        AiAnalysis.xunlong()
+
     # 开始分析
     if analyze_button:
         # 清除之前的结果

@@ -2,17 +2,72 @@
 
 本目录包含复合多AI智能体股票团队分析系统的所有文档。
 
+### 本地启动
+ conda activate aistock
+streamlit run app.py
 
 
+[//]: # (安装依赖)
+pip install -r requirements.txt -i  https://pypi.tuna.tsinghua.edu.cn/simple
 
 
 ### 启动系统  配置详情请看 [QUICK_START.md]
+
+#### Linux  阿里云服务器
 ```bash
-streamlit run app.py
+启动：
+nohup streamlit run app.py > /opt/logs/streamlit.log 2>&1 &
+
+
+重启： 
+pkill -f "streamlit run app.py" & ps aux | grep streamlit
+nohup streamlit run app.py > /opt/logs/streamlit.log 2>&1 &
+
 ```
+
 访问：http://localhost:8501
 
+#### Docker启动（Linux系统）
 
+**⚠️ 遇到镜像拉取错误？** 查看：[QUICK_FIX.md](QUICK_FIX.md) - 快速解决镜像源问题
+
+
+**方法一：使用启动脚本（推荐）**
+```bash
+chmod +x start-docker.sh fix-docker-mirror.sh
+./start-docker.sh
+```
+
+**方法二：使用Docker Compose**
+```bash
+# 如果遇到镜像拉取错误，先配置镜像源
+sudo ./fix-docker-mirror.sh
+
+# 构建并启动
+docker compose up -d
+
+# 查看日志
+docker logs -f aiagents-stockinfo
+
+# 停止服务
+docker compose down
+```
+
+**方法三：直接使用Docker命令**
+```bash
+# 构建镜像
+docker build -t aiagents-stockinfo .
+
+# 运行容器
+docker run -d -p 8501:8501 --name aiagents-stockinfo aiagents-stockinfo
+```
+
+访问：http://localhost:8501 或 http://101.132.190.29:8501
+
+**相关文档：**
+- 快速修复：[QUICK_FIX.md](QUICK_FIX.md) - 解决Docker镜像拉取错误
+- 详细指南：[DOCKER_QUICK_START.md](DOCKER_QUICK_START.md) - 完整Docker部署文档
+- 中文说明：[Docker使用说明.md](Docker使用说明.md) - 简化版中文指南
 
 
 

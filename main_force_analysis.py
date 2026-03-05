@@ -7,8 +7,6 @@
 
 from typing import Dict, List
 import pandas as pd
-from mcp.server.fastmcp.server import logger
-
 from common.readFile import ReadFile
 from main_force_selector import main_force_selector
 from stock_data import StockDataFetcher
@@ -16,6 +14,7 @@ from ai_agents import StockAnalysisAgents
 import time
 import json
 from common.extractText import split_text, extract_stock_codes
+
 
 
 class MainForceAnalyzer:
@@ -128,8 +127,8 @@ class MainForceAnalyzer:
                 'industry_analysis_codes': industry_analysis_codes,
                 'fundamental_analysis_codes': fundamental_analysis_codes
             }
-            ReadFile.replase_json_data('D:\\D_disk\\project\\code\\pythonCode\\pythonProject\\stockProject\\aitrader\\data\\output\\json\\al_agent_stock_program.json',
-                new_stocks=main_json_data, key='main_stocks')
+
+            ReadFile.replase_json_data(ReadFile.getProjectPath() + '\\aitrader\\data\\output\\json\\al_agent_stock_program.json', main_json_data)
 
             # 保存分析报告到对象属性，供UI展示
             self.fund_flow_analysis = fund_flow_analysis

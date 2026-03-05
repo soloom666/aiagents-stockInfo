@@ -52,4 +52,26 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
+.cache/
 
+# Docker files
+Dockerfile
+docker-compose.yml
+.dockerignore
+start-docker.sh
+stop-docker.sh
+
+# 文档（可选，如果想在容器中保留文档，注释掉下面这行）
+# docs/
+# *.md
+
+# 测试文件
+tests/
+test_*.py
+*_test.py
+
+# 临时文件
+*.tmp
+*.temp
+.claude/

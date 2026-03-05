@@ -16,6 +16,7 @@ from main_force_ui import display_main_force_selector
 from sector_strategy_ui import display_sector_strategy
 from longhubang_ui import display_longhubang
 from smart_monitor_ui import smart_monitor_ui
+from auth_ui import is_logged_in, show_login_page, show_sidebar_user_info, show_user_management
 
 # 页面配置
 st.set_page_config(
@@ -271,6 +272,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def main():
+    # ── 登录检查 ──────────────────────────────────
+    if not is_logged_in():
+        show_login_page()
+        return
+    # ─────────────────────────────────────────────
+
     # 顶部标题栏
     st.markdown("""
     <div class="top-nav">
@@ -418,6 +425,9 @@ def main():
 
         st.markdown("---")
 
+        # 用户信息 & 注销
+        show_sidebar_user_info()
+
         # 帮助信息
         with st.expander("💡 使用帮助"):
             st.markdown("""
@@ -439,6 +449,11 @@ def main():
             5. 情绪数据(ARBR) → 6. 新闻(qstock)
             7. AI团队分析 → 8. 团队讨论 → 9. 决策
             """)
+
+    # 检查是否显示用户管理
+    if st.session_state.get('show_user_mgmt'):
+        show_user_management()
+        return
 
     # 检查是否显示历史记录
     if 'show_history' in st.session_state and st.session_state.show_history:
@@ -705,7 +720,7 @@ def main():
 def check_api_key():
     """检查API密钥是否配置"""
     try:
-        import config
+        import configs
         return bool(config.DEEPSEEK_API_KEY and config.DEEPSEEK_API_KEY.strip())
     except:
         return False

@@ -27,7 +27,7 @@ def check_requirements():
 def check_config():
     """检查配置文件"""
     try:
-        import config
+        import configs as config
         if not config.DEEPSEEK_API_KEY:
             print("⚠️  警告: DeepSeek API Key 未配置")
             print("请在config.py中设置 DEEPSEEK_API_KEY")
@@ -52,7 +52,8 @@ def main():
     
     # 启动Streamlit应用
     print("🌐 正在启动Web界面...")
-    print("📝 访问地址: http://localhost:8503")
+    print("📝 本地访问: http://localhost:8503")
+    print("📝 局域网访问: http://<本机IP>:8503")
     print("⏹️  按 Ctrl+C 停止服务")
     print("=" * 50)
     
@@ -60,7 +61,7 @@ def main():
         subprocess.run([
             sys.executable, "-m", "streamlit", "run", "app.py",
             "--server.port", "8503",
-            "--server.address", "127.0.0.1"
+            "--server.address", "0.0.0.0"
         ])
     except KeyboardInterrupt:
         print("\n👋 感谢使用AI股票分析系统！")

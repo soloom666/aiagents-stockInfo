@@ -11,7 +11,21 @@ from datetime import datetime, timedelta
 import time
 from longhubang_engine import LonghubangEngine
 from longhubang_pdf import LonghubangPDFGenerator
-from aitrader.a_self_Strategy.ai_analysis.ai_analysis_run import AiAnalysis
+
+
+def _load_ai_analysis():
+    """Lazy-load optional aitrader quant dependencies for the Xunlong feature."""
+    try:
+        from aitrader.a_self_Strategy.ai_analysis.ai_analysis_run import AiAnalysis
+        return AiAnalysis
+    except ImportError as exc:
+        missing_module = getattr(exc, "name", None) or str(exc)
+        raise RuntimeError(
+            "寻龙记依赖未安装或未安装完整。"
+            f" 当前缺少模块: `{missing_module}`。"
+            " 请先执行 `python -m pip install -r requirements-quant.txt`，"
+            "并优先使用 Python 3.12 环境。"
+        ) from exc
 
 
 
@@ -63,7 +77,7 @@ def display_longhubang():
            - 给出最终推荐股票清单
            - 提供具体操作策略
         
-        ### 📊 数据来源
+        ### 📊 数据来源获取股票历史数据可用列
         
         数据来自**StockAPI龙虎榜接口**，包括：
         - 游资上榜交割单历史数据
@@ -150,22 +164,40 @@ def display_analysis_tab():
     col1, col2, col3 = st.columns([2, 2, 2])
     
     with col1:
-        analyze_button = st.button("🚀 开始分析", type="primary", width='stretch')
+        analyze_button = st.button("🚀 开始分析", type="primary", use_container_width=True)
     
     with col2:
-        if st.button("🔄 清除结果", width='stretch'):
+        if st.button("🔄 清除结果", use_container_width=True):
             if 'longhubang_result' in st.session_state:
                 del st.session_state.longhubang_result
             st.success("已清除分析结果")
             st.rerun()
     with col3:
-        long_button = st.button("🐉 寻龙记", type="primary", width='stretch')
+        long_button = st.button("🐉 寻龙记", type="primary", use_container_width=True)
 
     st.markdown("---")
 
     # 寻龙分析
     if long_button:
-        AiAnalysis.xunlong()
+        if 'xunlong_result' in st.session_state:
+            del st.session_state['xunlong_result']
+        with st.spinner("🐉 寻龙记运行中，正在分析推荐股票，请稍候..."):
+            try:
+                ai_analysis = _load_ai_analysis()
+                result = ai_analysis.xunlong()
+                if result:
+                    st.session_state['xunlong_result'] = result
+                    st.rerun()
+                else:
+                    st.warning("⚠️ 寻龙记未返回数据，请检查数据文件是否存在")
+            except Exception as e:
+                st.error(f"❌ 寻龙记运行失败: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
+
+    # 展示寻龙记结果
+    if 'xunlong_result' in st.session_state:
+        display_xunlong_results(st.session_state['xunlong_result'])
 
     # 开始分析
     if analyze_button:
@@ -188,6 +220,142 @@ def display_analysis_tab():
             display_analysis_results(result)
         else:
             st.error(f"❌ 分析失败: {result.get('error', '未知错误')}")
+
+
+def display_xunlong_results(result):
+    """展示寻龙记分析结果"""
+    st.markdown("## 🐉 寻龙记分析结果")
+
+    # 顶部清除按钮
+    if st.button("🗑️ 清除寻龙记结果", key="clear_xunlong"):
+        del st.session_state['xunlong_result']
+        st.rerun()
+
+    macd_stocks = result.get('macd') or []
+    yaogu_stocks = result.get('yaogu') or []
+    diff_stocks = result.get('diff') or []
+    al_agent_stocks = result.get('al_agent_stocks') or {}
+
+    # 概况指标
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("📈 MACD筛选", f"{len(macd_stocks)} 只")
+    with col2:
+        st.metric("🔥 妖股策略", f"{len(yaogu_stocks)} 只")
+    with col3:
+        agent_lhb = al_agent_stocks.get('longhuban_stocks') or []
+        if isinstance(agent_lhb, str):
+            agent_lhb = [s.strip() for s in agent_lhb.split(',') if s.strip()]
+        st.metric("🎯 AI龙虎榜", f"{len(agent_lhb)} 只")
+    with col4:
+        st.metric("🆕 新增变化", f"{len(diff_stocks)} 只")
+
+    st.markdown("---")
+
+    # MACD策略股票
+    with st.expander(f"📈 MACD策略推荐股票 ({len(macd_stocks)} 只)", expanded=True):
+        if macd_stocks:
+            cols = st.columns(min(len(macd_stocks), 6))
+            for i, code in enumerate(macd_stocks):
+                cols[i % 6].markdown(
+                    f"<div style='background:#1e3a5f;border-radius:8px;padding:8px 12px;"
+                    f"text-align:center;margin:4px;font-weight:bold;color:#4fc3f7;'>{code}</div>",
+                    unsafe_allow_html=True
+                )
+        else:
+            st.info("暂无MACD策略推荐股票")
+
+    # 妖股策略股票
+    with st.expander(f"🔥 妖股策略推荐股票 ({len(yaogu_stocks)} 只)", expanded=True):
+        if yaogu_stocks:
+            cols = st.columns(min(len(yaogu_stocks), 6))
+            for i, code in enumerate(yaogu_stocks):
+                cols[i % 6].markdown(
+                    f"<div style='background:#3e1f1f;border-radius:8px;padding:8px 12px;"
+                    f"text-align:center;margin:4px;font-weight:bold;color:#ff8a65;'>{code}</div>",
+                    unsafe_allow_html=True
+                )
+        else:
+            st.info("暂无妖股策略推荐股票")
+
+    # AI Agent推荐股票
+    if al_agent_stocks:
+        with st.expander("🤖 AI Agent推荐股票详情", expanded=True):
+            main_stocks = al_agent_stocks.get('main_stocks', {})
+            if main_stocks:
+                tab1, tab2, tab3, tab4 = st.tabs(["资金流向", "行业分析", "基本面分析", "龙虎榜"])
+
+                def _to_list(val):
+                    if isinstance(val, list):
+                        return val
+                    if isinstance(val, str):
+                        return [v.strip() for v in val.split(',') if v.strip()]
+                    return list(val) if val else []
+
+                def _render_stock_tags(codes, color):
+                    if codes:
+                        cols = st.columns(min(len(codes), 6))
+                        for i, code in enumerate(codes):
+                            cols[i % 6].markdown(
+                                f"<div style='background:{color};border-radius:8px;padding:8px 12px;"
+                                f"text-align:center;margin:4px;font-weight:bold;color:#fff;'>{code}</div>",
+                                unsafe_allow_html=True
+                            )
+                    else:
+                        st.info("暂无数据")
+
+                with tab1:
+                    _render_stock_tags(_to_list(main_stocks.get('fund_flow_analysis_codes')), '#1a4a1a')
+                with tab2:
+                    _render_stock_tags(_to_list(main_stocks.get('industry_analysis_codes')), '#1a2a4a')
+                with tab3:
+                    _render_stock_tags(_to_list(main_stocks.get('fundamental_analysis_codes')), '#3a1a4a')
+                with tab4:
+                    _render_stock_tags(_to_list(al_agent_stocks.get('longhuban_stocks')), '#4a2a1a')
+
+    # 新增变化提醒
+    if diff_stocks:
+        st.markdown("---")
+        st.success(f"🆕 **新增推荐股票** (较上次新增 {len(diff_stocks)} 只)")
+        cols = st.columns(min(len(diff_stocks), 6))
+        for i, code in enumerate(diff_stocks):
+            cols[i % 6].markdown(
+                f"<div style='background:#1a4a1a;border-radius:8px;padding:10px 14px;"
+                f"text-align:center;margin:4px;font-weight:bold;color:#69f0ae;font-size:16px;'>"
+                f"🆕 {code}</div>",
+                unsafe_allow_html=True
+            )
+
+    # 汇总表格
+    st.markdown("---")
+    st.markdown("### 📊 股票汇总列表")
+    all_codes = list(dict.fromkeys(
+        list(macd_stocks) + list(yaogu_stocks) + list(agent_lhb)
+    ))
+    if all_codes:
+        summary_data = []
+        macd_set = set(str(c) for c in macd_stocks)
+        yaogu_set = set(str(c) for c in yaogu_stocks)
+        agent_set = set(str(c) for c in agent_lhb)
+        diff_set = set(str(c) for c in diff_stocks)
+        for code in all_codes:
+            code_str = str(code)
+            tags = []
+            if code_str in macd_set:
+                tags.append("MACD")
+            if code_str in yaogu_set:
+                tags.append("妖股")
+            if code_str in agent_set:
+                tags.append("AI龙虎")
+            summary_data.append({
+                "股票代码": code_str,
+                "策略来源": " | ".join(tags),
+                "是否新增": "🆕 新增" if code_str in diff_set else ""
+            })
+        df = pd.DataFrame(summary_data)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("暂无推荐股票数据")
 
 
 def run_longhubang_analysis(model="deepseek-chat", date=None, days=1):
@@ -411,7 +579,7 @@ def display_scoring_ranking(result):
             "净流入": st.column_config.NumberColumn("净流入(元)", format="%.2f")
         },
         hide_index=True,
-        width='stretch'
+        use_container_width=True
     )
     
     # 一键批量分析功能
@@ -435,7 +603,7 @@ def display_scoring_ranking(result):
     
     with col_batch3:
         st.write("")  # 占位
-        if st.button("🚀 开始批量分析", type="primary", width='stretch'):
+        if st.button("🚀 开始批量分析", type="primary", use_container_width=True):
             # 提取股票代码
             stock_codes = top10_df.head(batch_count)['股票代码'].tolist()
             
@@ -536,7 +704,7 @@ def display_scoring_ranking(result):
             "净流入": st.column_config.NumberColumn("净流入(元)", format="%.2f")
         },
         hide_index=True,
-        width='stretch'
+        use_container_width=True
     )
 
 
@@ -569,7 +737,7 @@ def display_recommended_stocks(result):
             "reason": st.column_config.TextColumn("推荐理由")
         },
         hide_index=True,
-        width='stretch'
+        use_container_width=True
     )
     
     # 详细推荐理由
@@ -645,7 +813,7 @@ def display_data_details(result):
                 "净流入金额": st.column_config.NumberColumn("净流入金额(元)", format="%.2f")
             },
             hide_index=True,
-            width='stretch'
+            use_container_width=True
         )
     
     # TOP股票
@@ -662,7 +830,7 @@ def display_data_details(result):
                 "net_inflow": st.column_config.NumberColumn("净流入金额(元)", format="%.2f")
             },
             hide_index=True,
-            width='stretch'
+            use_container_width=True
         )
     
     # 热门概念
@@ -683,7 +851,7 @@ def display_data_details(result):
                 "出现次数": st.column_config.NumberColumn("出现次数", format="%d")
             },
             hide_index=True,
-            width='stretch'
+            use_container_width=True
         )
 
 
@@ -739,7 +907,7 @@ def display_pdf_export_section(result):
         st.info("💡 点击按钮生成并下载专业分析报告")
     
     with col2:
-        if st.button("📥 生成PDF", type="primary", width='stretch'):
+        if st.button("📥 生成PDF", type="primary", use_container_width=True):
             with st.spinner("正在生成PDF报告..."):
                 try:
                     generator = LonghubangPDFGenerator()
@@ -754,8 +922,7 @@ def display_pdf_export_section(result):
                         label="📥 下载PDF报告",
                         data=pdf_bytes,
                         file_name=f"智瞰龙虎报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                        mime="application/pdf",
-                        width='stretch'
+                        mime="application/pdf"
                     )
                     
                     st.success("✅ PDF报告生成成功！")
@@ -764,7 +931,7 @@ def display_pdf_export_section(result):
                     st.error(f"❌ PDF生成失败: {str(e)}")
     
     with col3:
-        if st.button("📝 生成Markdown", type="secondary", width='stretch'):
+        if st.button("📝 生成Markdown", type="secondary", use_container_width=True):
             with st.spinner("正在生成Markdown报告..."):
                 try:
                     # 生成Markdown内容
@@ -775,8 +942,7 @@ def display_pdf_export_section(result):
                         label="📥 下载Markdown报告",
                         data=markdown_content,
                         file_name=f"智瞰龙虎报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
-                        mime="text/markdown",
-                        width='stretch'
+                        mime="text/markdown"
                     )
                     
                     st.success("✅ Markdown报告生成成功！")
@@ -974,7 +1140,7 @@ def display_history_tab():
                             "hold_period": st.column_config.TextColumn("持有周期")
                         },
                         hide_index=True,
-                        width='stretch'
+                        use_container_width=True
                     )
                 
                 st.markdown("---")
@@ -996,11 +1162,17 @@ def display_history_tab():
                             'risk': {'title': '⚠️ 风险控制专家', 'icon': '⚠️'},
                             'chief': {'title': '👔 首席策略师', 'icon': '👔'}
                         }
-                        
-                        for agent_key, info in agent_info.items():
-                            agent_data = agents_analysis.get(agent_key, {})
-                            if agent_data:
-                                with st.expander(f"{info['icon']} {info['title']}", expanded=False):
+
+                        available_agents = [
+                            (agent_key, info, agents_analysis.get(agent_key, {}))
+                            for agent_key, info in agent_info.items()
+                            if agents_analysis.get(agent_key, {})
+                        ]
+
+                        if available_agents:
+                            agent_tabs = st.tabs([f"{info['icon']} {info['title']}" for _, info, _ in available_agents])
+                            for tab, (_, info, agent_data) in zip(agent_tabs, available_agents):
+                                with tab:
                                     analysis = agent_data.get('analysis', '暂无分析')
                                     st.markdown(analysis)
                                     st.caption(f"分析时间: {agent_data.get('timestamp', 'N/A')}")
@@ -1072,7 +1244,7 @@ def display_history_tab():
                                 "净流入": st.column_config.NumberColumn("净流入(元)", format="%.2f")
                             },
                             hide_index=True,
-                            width='stretch'
+                            use_container_width=True
                         )
                         
                         # 显示评分说明
@@ -1245,7 +1417,7 @@ def display_statistics_tab():
                     "total_net_inflow": st.column_config.NumberColumn("总净流入(元)", format="%.2f")
                 },
                 hide_index=True,
-                width='stretch'
+                use_container_width=True
             )
         
         st.markdown("---")
@@ -1265,7 +1437,7 @@ def display_statistics_tab():
                     "total_net_inflow": st.column_config.NumberColumn("总净流入(元)", format="%.2f")
                 },
                 hide_index=True,
-                width='stretch'
+                use_container_width=True
             )
         
     except Exception as e:
@@ -1285,7 +1457,7 @@ def run_longhubang_batch_analysis():
         # 返回按钮
         col_back, col_clear = st.columns(2)
         with col_back:
-            if st.button("🔙 返回龙虎榜分析", width='stretch'):
+            if st.button("🔙 返回龙虎榜分析", use_container_width=True):
                 # 清除所有批量分析相关状态
                 if 'longhubang_batch_trigger' in st.session_state:
                     del st.session_state.longhubang_batch_trigger
@@ -1296,7 +1468,7 @@ def run_longhubang_batch_analysis():
                 st.rerun()
         
         with col_clear:
-            if st.button("🔄 重新分析", width='stretch'):
+            if st.button("🔄 重新分析", use_container_width=True):
                 # 清除结果，保留触发标志和代码
                 if 'longhubang_batch_results' in st.session_state:
                     del st.session_state.longhubang_batch_results
@@ -1357,11 +1529,11 @@ def run_longhubang_batch_analysis():
     
     start_analysis = False
     with col_confirm:
-        if st.button("🚀 确认开始分析", type="primary", width='stretch'):
+        if st.button("🚀 确认开始分析", type="primary", use_container_width=True):
             start_analysis = True
     
     with col_cancel:
-        if st.button("❌ 取消", type="secondary", width='stretch'):
+        if st.button("❌ 取消", type="secondary", use_container_width=True):
             # 清除所有批量分析相关状态
             if 'longhubang_batch_trigger' in st.session_state:
                 del st.session_state.longhubang_batch_trigger
@@ -1640,4 +1812,3 @@ if __name__ == "__main__":
     )
     
     display_longhubang()
-

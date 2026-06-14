@@ -1,8 +1,30 @@
 import os
-from dotenv import load_dotenv
 
-# 加载环境变量（override=True 强制覆盖已存在的环境变量）
-load_dotenv(override=True)
+
+def _load_env_fallback():
+    """当 python-dotenv 不可用时，使用最小兜底逻辑加载本地 .env。"""
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.exists(env_path):
+        return
+
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                os.environ[key] = value
+    except Exception:
+        pass
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+except ModuleNotFoundError:
+    _load_env_fallback()
 
 # DeepSeek API配置
 # DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-df5b2ac4fb0143ca82733901adb5c93c")

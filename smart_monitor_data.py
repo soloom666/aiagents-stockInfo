@@ -189,8 +189,17 @@ class SmartMonitorDataFetcher:
             技术指标数据
         """
         import time
-        
-        # 方法1: 尝试使用TDX（如果启用）
+
+        # 优先 Tushare
+        if self.ts_pro:
+            self.logger.info(f"降级到Tushare获取 {stock_code} 历史数据...")
+            return self._get_technical_indicators_from_tushare(stock_code, period)
+        else:
+            self.logger.error(f"AKShare失败且未配置Tushare，无法获取 {stock_code} 技术指标")
+            return None
+
+
+        # 其次方法1: 尝试使用TDX（如果启用）
         if self.use_tdx and self.tdx_fetcher:
             try:
                 indicators = self.tdx_fetcher.get_technical_indicators(stock_code, period)
@@ -236,14 +245,7 @@ class SmartMonitorDataFetcher:
                 else:
                     self.logger.warning(f"AKShare获取历史数据失败 {stock_code}（已重试{retry}次），尝试降级到Tushare")
                     break
-        
-        # 方法3: 降级到Tushare
-        if self.ts_pro:
-            self.logger.info(f"降级到Tushare获取 {stock_code} 历史数据...")
-            return self._get_technical_indicators_from_tushare(stock_code, period)
-        else:
-            self.logger.error(f"AKShare失败且未配置Tushare，无法获取 {stock_code} 技术指标")
-            return None
+
     
     def _calculate_all_indicators(self, df: pd.DataFrame, stock_code: str) -> Optional[Dict]:
         """

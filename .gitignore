@@ -4,7 +4,13 @@
 /test_pdf_export.py
 /test_pe_pb.py
 /venv
+/.venv312
 /__pycache__
+**/__pycache__/
+*.pyc
+.idea/
+log/
+risk_data_debug_output.txt
 # 环境变量文件
 .env
 /.cursor

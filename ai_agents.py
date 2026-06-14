@@ -94,7 +94,7 @@ class StockAnalysisAgents:
             risk_data_text = f"""
 
 【实际风险数据】（来自问财）
-{fetcher.format_risk_data_for_ai(risk_data)}
+{self.deepseek_client.shrink_multiline_text(fetcher.format_risk_data_for_ai(risk_data), max_chars=2600, max_lines=36)}
 
 以上是通过问财（pywencai）获取的实际风险数据，请重点关注这些数据进行深度风险分析。
 """
@@ -198,6 +198,7 @@ class StockAnalysisAgents:
 
 请基于实际数据进行客观、专业、严谨的风险评估，给出可操作的风险控制建议。
 如果某些风险数据缺失，也要指出数据缺失本身可能带来的风险。
+{self.deepseek_client.concise_output_instruction(700)}
 """
         
         messages = [
@@ -206,7 +207,7 @@ class StockAnalysisAgents:
         ]
         
         # analysis = self.deepseek_client.call_api(messages, max_tokens=6000)
-        analysis = self.deepseek_client.call_api(messages, max_tokens=3600)
+        analysis = self.deepseek_client.call_api(messages, max_tokens=1600)
 
         return {
             "agent_name": "风险管理师",
@@ -238,7 +239,7 @@ class StockAnalysisAgents:
             sentiment_data_text = f"""
 
 【市场情绪实际数据】
-{fetcher.format_sentiment_data_for_ai(sentiment_data)}
+{self.deepseek_client.shrink_multiline_text(fetcher.format_sentiment_data_for_ai(sentiment_data), max_chars=2200, max_lines=30)}
 
 以上是通过akshare获取的实际市场情绪数据，请重点基于这些数据进行分析。
 """
@@ -287,6 +288,7 @@ class StockAnalysisAgents:
    - 情绪面的机会和风险提示
 
 请确保分析基于实际数据，给出客观专业的市场情绪评估。
+{self.deepseek_client.concise_output_instruction(500)}
 """
         
         messages = [
@@ -295,7 +297,7 @@ class StockAnalysisAgents:
         ]
         
         # analysis = self.deepseek_client.call_api(messages, max_tokens=4000)
-        analysis = self.deepseek_client.call_api(messages, max_tokens=3000)
+        analysis = self.deepseek_client.call_api(messages, max_tokens=1200)
 
         return {
             "agent_name": "市场情绪分析师",
@@ -329,7 +331,7 @@ class StockAnalysisAgents:
             news_text = f"""
 
 【最新新闻数据】
-{fetcher.format_news_for_ai(news_data)}
+{self.deepseek_client.shrink_multiline_text(fetcher.format_news_for_ai(news_data), max_chars=2400, max_lines=28)}
 
 以上是通过qstock获取的实际新闻数据，请重点基于这些数据进行分析。
 """
@@ -388,6 +390,7 @@ class StockAnalysisAgents:
 
 请确保分析客观、专业，重点关注对投资决策有实质性影响的内容。
 如果某些新闻的重要性较低，可以简要提及或略过。
+{self.deepseek_client.concise_output_instruction(550)}
 """
         
         messages = [
@@ -396,7 +399,7 @@ class StockAnalysisAgents:
         ]
         
         # analysis = self.deepseek_client.call_api(messages, max_tokens=4000)
-        analysis = self.deepseek_client.call_api(messages, max_tokens=3000)
+        analysis = self.deepseek_client.call_api(messages, max_tokens=1300)
 
         return {
             "agent_name": "新闻分析师",
@@ -474,6 +477,10 @@ class StockAnalysisAgents:
         """进行团队讨论"""
         print("🤝 分析团队正在进行综合讨论...")
         time.sleep(2)
+
+        for agent_result in agents_results.values():
+            if self.deepseek_client.is_balance_error_message(agent_result.get("analysis", "")):
+                return agent_result.get("analysis", "")
         
         # 收集参与分析的分析师名单和报告
         participants = []
@@ -481,27 +488,45 @@ class StockAnalysisAgents:
         
         if "technical" in agents_results:
             participants.append("技术分析师")
-            reports.append(f"【技术分析师报告】\n{agents_results['technical'].get('analysis', '')}")
+            reports.append(
+                f"【技术分析师观点摘要】\n"
+                f"{self.deepseek_client.build_context_digest(agents_results['technical'].get('analysis', ''), max_chars=900)}"
+            )
         
         if "fundamental" in agents_results:
             participants.append("基本面分析师")
-            reports.append(f"【基本面分析师报告】\n{agents_results['fundamental'].get('analysis', '')}")
+            reports.append(
+                f"【基本面分析师观点摘要】\n"
+                f"{self.deepseek_client.build_context_digest(agents_results['fundamental'].get('analysis', ''), max_chars=900)}"
+            )
         
         if "fund_flow" in agents_results:
             participants.append("资金面分析师")
-            reports.append(f"【资金面分析师报告】\n{agents_results['fund_flow'].get('analysis', '')}")
+            reports.append(
+                f"【资金面分析师观点摘要】\n"
+                f"{self.deepseek_client.build_context_digest(agents_results['fund_flow'].get('analysis', ''), max_chars=900)}"
+            )
         
         if "risk_management" in agents_results:
             participants.append("风险管理师")
-            reports.append(f"【风险管理师报告】\n{agents_results['risk_management'].get('analysis', '')}")
+            reports.append(
+                f"【风险管理师观点摘要】\n"
+                f"{self.deepseek_client.build_context_digest(agents_results['risk_management'].get('analysis', ''), max_chars=900)}"
+            )
         
         if "market_sentiment" in agents_results:
             participants.append("市场情绪分析师")
-            reports.append(f"【市场情绪分析师报告】\n{agents_results['market_sentiment'].get('analysis', '')}")
+            reports.append(
+                f"【市场情绪分析师观点摘要】\n"
+                f"{self.deepseek_client.build_context_digest(agents_results['market_sentiment'].get('analysis', ''), max_chars=800)}"
+            )
         
         if "news" in agents_results:
             participants.append("新闻分析师")
-            reports.append(f"【新闻分析师报告】\n{agents_results['news'].get('analysis', '')}")
+            reports.append(
+                f"【新闻分析师观点摘要】\n"
+                f"{self.deepseek_client.build_context_digest(agents_results['news'].get('analysis', ''), max_chars=800)}"
+            )
         
         # 组合所有报告
         all_reports = "\n\n".join(reports)
@@ -515,7 +540,7 @@ class StockAnalysisAgents:
 
 {all_reports}
 
-请模拟一场真实的投资决策会议讨论：
+请基于以上摘要输出一份简明会议纪要：
 1. 各分析师观点的一致性和分歧
 2. 不同维度分析的权重考量
 3. 风险收益评估
@@ -523,8 +548,9 @@ class StockAnalysisAgents:
 5. 策略制定思路
 6. 达成初步共识
 
-请以对话形式展现讨论过程，体现专业团队的思辨过程。
+请不要展开冗长对话，直接输出结构化纪要和最终共识。
 注意：只讨论参与分析的分析师的观点。
+{self.deepseek_client.concise_output_instruction(650)}
 """
         
         messages = [
@@ -533,15 +559,18 @@ class StockAnalysisAgents:
         ]
         
         # discussion_result = self.deepseek_client.call_api(messages, max_tokens=6000)
-        discussion_result = self.deepseek_client.call_api(messages, max_tokens=5000)
+        discussion_result = self.deepseek_client.call_api(messages, max_tokens=1500)
 
         print("✅ 团队讨论完成")
         return discussion_result
-    
+
     def make_final_decision(self, discussion_result: str, stock_info: Dict, indicators: Dict) -> Dict[str, Any]:
         """制定最终投资决策"""
         print("📋 正在制定最终投资决策...")
         time.sleep(1)
+
+        if self.deepseek_client.is_api_error_message(discussion_result):
+            return {"decision_text": discussion_result}
         
         decision = self.deepseek_client.final_decision(discussion_result, stock_info, indicators)
         

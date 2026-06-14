@@ -1,0 +1,78 @@
+{
+    "_comment": "这是一个代理配置示例文件",
+    "_usage": "复制此配置到 config.json 的 PROXY_CONFIG 部分",
+
+    "示例1_Clash代理": {
+        "PROXY_CONFIG": {
+            "enable": true,
+            "http_proxy": "http://127.0.0.1:7890",
+            "https_proxy": "http://127.0.0.1:7890",
+            "socks_proxy": ""
+        }
+    },
+
+    "示例2_V2Ray代理": {
+        "PROXY_CONFIG": {
+            "enable": true,
+            "http_proxy": "http://127.0.0.1:10808",
+            "https_proxy": "http://127.0.0.1:10808",
+            "socks_proxy": "socks5://127.0.0.1:10808"
+        }
+    },
+
+    "示例3_SSR_SOCKS5代理": {
+        "PROXY_CONFIG": {
+            "enable": true,
+            "http_proxy": "",
+            "https_proxy": "",
+            "socks_proxy": "socks5://127.0.0.1:1080"
+        },
+        "_note": "使用 SOCKS5 需要安装: pip install pysocks"
+    },
+
+    "示例4_公司代理": {
+        "PROXY_CONFIG": {
+            "enable": true,
+            "http_proxy": "http://proxy.company.com:8080",
+            "https_proxy": "http://proxy.company.com:8080",
+            "socks_proxy": ""
+        }
+    },
+
+    "示例5_带认证的代理": {
+        "PROXY_CONFIG": {
+            "enable": true,
+            "http_proxy": "http://username:password@proxy.com:8080",
+            "https_proxy": "http://username:password@proxy.com:8080",
+            "socks_proxy": ""
+        },
+        "_warning": "不要将包含密码的配置提交到公共仓库"
+    },
+
+    "示例6_不使用代理_直连": {
+        "PROXY_CONFIG": {
+            "enable": false,
+            "http_proxy": "",
+            "https_proxy": "",
+            "socks_proxy": ""
+        }
+    },
+
+    "常见代理工具端口参考": {
+        "Clash": "7890",
+        "Clash_Verge": "7897",
+        "V2Ray": "10808",
+        "SSR": "1080",
+        "Shadowsocks": "1080",
+        "Qv2ray": "8889"
+    },
+
+    "使用步骤": [
+        "1. 选择适合你的代理配置示例",
+        "2. 复制 PROXY_CONFIG 部分到 config/config.json",
+        "3. 修改 enable 为 true",
+        "4. 修改代理地址和端口为你的实际配置",
+        "5. 运行测试: python test_proxy_config.py",
+        "6. 查看日志确认代理已启用"
+    ]
+}

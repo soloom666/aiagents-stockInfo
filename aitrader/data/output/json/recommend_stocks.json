@@ -1,0 +1,38 @@
+{
+    "macd": [
+        "000977",
+        "002703",
+        "000070",
+        "300265",
+        "300004"
+    ],
+    "yaogu": [],
+    "al_agent_stocks": {
+        "main_stocks": {
+            "fund_flow_analysis_codes": [],
+            "industry_analysis_codes": [
+                "000977.SZ",
+                "603290.SH",
+                "300199.SZ",
+                "300738.SZ"
+            ],
+            "fundamental_analysis_codes": []
+        },
+        "longhuban_stocks": [
+            "002428",
+            "603061",
+            "300265",
+            "601126",
+            "300004"
+        ],
+        "time": "2026-05-13 20:57:39"
+    },
+    "self_healing_meta": {
+        "source_weights": {
+            "macd": 1.0,
+            "longhubang_agent": 1.0
+        },
+        "generated_at": "2026-05-13 21:02:36"
+    },
+    "diff": []
+}

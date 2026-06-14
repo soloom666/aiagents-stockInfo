@@ -32,8 +32,14 @@ class LonghubangAgents:
         youzi_info = ""
         if summary.get('top_youzi'):
             youzi_info = "\n【活跃游资统计】\n"
-            for idx, (name, amount) in enumerate(list(summary['top_youzi'].items())[:15], 1):
+            for idx, (name, amount) in enumerate(list(summary['top_youzi'].items())[:10], 1):
                 youzi_info += f"{idx}. {name}: 净流入 {amount:,.2f} 元\n"
+
+        longhubang_excerpt = self.deepseek_client.shrink_multiline_text(
+            longhubang_data,
+            max_chars=3200,
+            max_lines=34
+        )
         
         prompt = f"""
 你是一名资深的游资研究专家，拥有10年以上的龙虎榜数据分析经验，深谙各路游资的操作风格和盈利模式。
@@ -48,7 +54,7 @@ class LonghubangAgents:
 
 {youzi_info}
 
-{longhubang_data[:8000]}
+{longhubang_excerpt}
 
 请基于以上龙虎榜数据，进行深入的游资行为分析：
 
@@ -95,6 +101,7 @@ class LonghubangAgents:
    - 提供仓位和止损建议
 
 请给出专业、实战性强的游资行为分析报告。
+{self.deepseek_client.concise_output_instruction(700)}
 """
         
         messages = [
@@ -102,7 +109,7 @@ class LonghubangAgents:
             {"role": "user", "content": prompt}
         ]
         
-        analysis = self.deepseek_client.call_api(messages, max_tokens=4000)
+        analysis = self.deepseek_client.call_api(messages, max_tokens=1600)
         
         print("  ✓ 游资行为分析师分析完成")
         
@@ -130,8 +137,14 @@ class LonghubangAgents:
         stock_info = ""
         if summary.get('top_stocks'):
             stock_info = "\n【热门股票统计】\n"
-            for idx, stock in enumerate(summary['top_stocks'][:20], 1):
+            for idx, stock in enumerate(summary['top_stocks'][:12], 1):
                 stock_info += f"{idx}. {stock['name']}({stock['code']}): 净流入 {stock['net_inflow']:,.2f} 元\n"
+
+        longhubang_excerpt = self.deepseek_client.shrink_multiline_text(
+            longhubang_data,
+            max_chars=3200,
+            max_lines=34
+        )
         
         prompt = f"""
 你是一名资深的个股研究专家和短线交易高手，精通技术分析和资金分析，擅长从龙虎榜中挖掘短期爆发股。
@@ -143,7 +156,7 @@ class LonghubangAgents:
 
 {stock_info}
 
-{longhubang_data[:8000]}
+{longhubang_excerpt}
 
 请基于以上龙虎榜数据，进行深入的个股潜力分析：
 
@@ -196,6 +209,7 @@ class LonghubangAgents:
    - 给出持有周期建议（超短/短线/波段）
 
 请给出专业、实战、具有可操作性的个股潜力分析报告。务必重点分析次日大概率上涨的股票！
+{self.deepseek_client.concise_output_instruction(750)}
 """
         
         messages = [
@@ -203,7 +217,7 @@ class LonghubangAgents:
             {"role": "user", "content": prompt}
         ]
         
-        analysis = self.deepseek_client.call_api(messages, max_tokens=4000)
+        analysis = self.deepseek_client.call_api(messages, max_tokens=1700)
         
         print("  ✓ 个股潜力分析师分析完成")
         
@@ -231,8 +245,14 @@ class LonghubangAgents:
         concept_info = ""
         if summary.get('hot_concepts'):
             concept_info = "\n【热门概念统计】\n"
-            for idx, (concept, count) in enumerate(list(summary['hot_concepts'].items())[:20], 1):
+            for idx, (concept, count) in enumerate(list(summary['hot_concepts'].items())[:12], 1):
                 concept_info += f"{idx}. {concept}: 出现 {count} 次\n"
+
+        longhubang_excerpt = self.deepseek_client.shrink_multiline_text(
+            longhubang_data,
+            max_chars=3200,
+            max_lines=34
+        )
         
         prompt = f"""
 你是一名资深的题材研究专家，拥有敏锐的市场嗅觉，擅长从龙虎榜数据中捕捉题材热点和板块轮动机会。
@@ -243,7 +263,7 @@ class LonghubangAgents:
 
 {concept_info}
 
-{longhubang_data[:8000]}
+{longhubang_excerpt}
 
 请基于以上龙虎榜数据，进行深入的题材追踪分析：
 
@@ -296,6 +316,7 @@ class LonghubangAgents:
    - 给出题材仓位和持有周期建议
 
 请给出专业、前瞻性强的题材追踪分析报告。
+{self.deepseek_client.concise_output_instruction(650)}
 """
         
         messages = [
@@ -303,7 +324,7 @@ class LonghubangAgents:
             {"role": "user", "content": prompt}
         ]
         
-        analysis = self.deepseek_client.call_api(messages, max_tokens=4000)
+        analysis = self.deepseek_client.call_api(messages, max_tokens=1500)
         
         print("  ✓ 题材追踪分析师分析完成")
         
@@ -327,6 +348,12 @@ class LonghubangAgents:
         print("⚠️ 风险控制专家正在分析...")
         time.sleep(1)
         
+        longhubang_excerpt = self.deepseek_client.shrink_multiline_text(
+            longhubang_data,
+            max_chars=3200,
+            max_lines=34
+        )
+
         prompt = f"""
 你是一名资深的风险控制专家和反向思维大师，拥有20年的市场风险管理经验，擅长识别龙虎榜中的风险信号和资金陷阱。
 
@@ -338,7 +365,7 @@ class LonghubangAgents:
 总卖出金额: {summary.get('total_sell_amount', 0):,.2f} 元
 净流入金额: {summary.get('total_net_inflow', 0):,.2f} 元
 
-{longhubang_data[:8000]}
+{longhubang_excerpt}
 
 请基于以上龙虎榜数据，进行全面的风险分析：
 
@@ -391,6 +418,7 @@ class LonghubangAgents:
    - 提供风险对冲策略
 
 请给出专业、严谨、保守的风险控制报告，宁可错过，不可做错。
+{self.deepseek_client.concise_output_instruction(650)}
 """
         
         messages = [
@@ -398,7 +426,7 @@ class LonghubangAgents:
             {"role": "user", "content": prompt}
         ]
         
-        analysis = self.deepseek_client.call_api(messages, max_tokens=4000)
+        analysis = self.deepseek_client.call_api(messages, max_tokens=1500)
         
         print("  ✓ 风险控制专家分析完成")
         
@@ -429,7 +457,11 @@ class LonghubangAgents:
             analyses_text += f"【{analysis['agent_name']}】分析报告\n"
             analyses_text += f"职责: {analysis['agent_role']}\n"
             analyses_text += f"{'='*60}\n"
-            analyses_text += analysis['analysis'] + "\n"
+            analyses_text += self.deepseek_client.build_context_digest(
+                analysis.get('analysis', ''),
+                max_chars=1000,
+                max_lines=16
+            ) + "\n"
         
         prompt = f"""
 你是一名资深的首席投资策略师，拥有CFA、FRM等专业资格，具有25年的市场实战经验和卓越的综合分析能力。
@@ -442,7 +474,7 @@ class LonghubangAgents:
 
 以下是各位分析师的详细分析报告：
 
-{analyses_text[:15000]}
+{analyses_text}
 
 请作为首席策略师，综合以上所有分析，给出最终的投资策略报告：
 
@@ -486,6 +518,7 @@ class LonghubangAgents:
    - 给出应对预案
 
 请给出专业、全面、可执行的首席策略师综合报告。报告要有明确的结论和可操作性！
+{self.deepseek_client.concise_output_instruction(900)}
 """
         
         messages = [
@@ -493,7 +526,7 @@ class LonghubangAgents:
             {"role": "user", "content": prompt}
         ]
         
-        analysis = self.deepseek_client.call_api(messages, max_tokens=4000)
+        analysis = self.deepseek_client.call_api(messages, max_tokens=2200)
 
         print("  ✓ 首席策略师分析完成")
         
@@ -547,4 +580,3 @@ if __name__ == "__main__":
     result = agents.youzi_behavior_analyst(test_data, test_summary)
     print(f"分析师: {result['agent_name']}")
     print(f"分析内容长度: {len(result['analysis'])} 字符")
-

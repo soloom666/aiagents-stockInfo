@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(test:*)",
+      "Bash(python:*)",
+      "Bash(where python:*)",
+      "Bash(pip show:*)",
+      "Bash(cmd:*)",
+      "Bash(cmd.exe /c \"where python\" 2>&1)",
+      "Bash(cmd.exe /c \"python -c \\\\\"import ast; ast.parse\\(open\\('E:/project/Python project/platform/aiagents-stockInfo/scheduled_tasks_manager.py',encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\\\\\"\" 2>&1)",
+      "Bash(cmd.exe /c \"python -c \\\\\"import ast; ast.parse\\(open\\('E:/project/Python project/platform/aiagents-stockInfo/scheduled_tasks_ui.py',encoding='utf-8'\\).read\\(\\)\\); print\\('OK'\\)\\\\\"\" 2>&1)",
+      "Bash(py -c \"import ast; ast.parse\\(open\\(''E:/project/Python project/platform/aiagents-stockInfo/scheduled_tasks_manager.py'',encoding=''utf-8''\\).read\\(\\)\\); print\\(''manager OK''\\)\")",
+      "Bash(py -c \"import ast; ast.parse\\(open\\(''E:/project/Python project/platform/aiagents-stockInfo/scheduled_tasks_ui.py'',encoding=''utf-8''\\).read\\(\\)\\); print\\(''ui OK''\\)\")"
+    ]
+  }
+}

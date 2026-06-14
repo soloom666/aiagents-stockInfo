@@ -25,6 +25,13 @@ class SectorStrategyEngine:
         if not self.logger.handlers:
             logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s %(name)s: %(message)s')
         print(f"[智策引擎] 初始化完成 (模型: {model})")
+
+    def _balance_error_from_agent(self, agent_result: Dict[str, Any]) -> str:
+        """Return a balance error message when an agent failed due to insufficient balance."""
+        analysis = agent_result.get("analysis", "")
+        if self.deepseek_client.is_balance_error_message(analysis):
+            return analysis
+        return ""
     
     def save_raw_data_with_fallback(self, data_type, data_df, data_date=None):
         """
@@ -131,6 +138,11 @@ class SectorStrategyEngine:
                 news_data=data.get("news", [])
             )
             agents_results["macro"] = macro_result
+            balance_error = self._balance_error_from_agent(macro_result)
+            if balance_error:
+                results["agents_analysis"] = agents_results
+                results["error"] = balance_error
+                return results
             
             # 板块诊断师
             print("2/4 板块诊断师...")
@@ -140,6 +152,11 @@ class SectorStrategyEngine:
                 market_data=data.get("market_overview", {})
             )
             agents_results["sector"] = sector_result
+            balance_error = self._balance_error_from_agent(sector_result)
+            if balance_error:
+                results["agents_analysis"] = agents_results
+                results["error"] = balance_error
+                return results
             
             # 资金流向分析师
             print("3/4 资金流向分析师...")
@@ -149,6 +166,11 @@ class SectorStrategyEngine:
                 sectors_data=data.get("sectors", {})
             )
             agents_results["fund"] = fund_result
+            balance_error = self._balance_error_from_agent(fund_result)
+            if balance_error:
+                results["agents_analysis"] = agents_results
+                results["error"] = balance_error
+                return results
             
             # 市场情绪解码员
             print("4/4 市场情绪解码员...")
@@ -158,6 +180,11 @@ class SectorStrategyEngine:
                 concepts_data=data.get("concepts", {})
             )
             agents_results["sentiment"] = sentiment_result
+            balance_error = self._balance_error_from_agent(sentiment_result)
+            if balance_error:
+                results["agents_analysis"] = agents_results
+                results["error"] = balance_error
+                return results
             
             results["agents_analysis"] = agents_results
             print("\n✓ 所有智能体分析完成")
@@ -216,10 +243,22 @@ class SectorStrategyEngine:
         time.sleep(2)
         
         # 收集各分析师的报告
-        macro_analysis = agents_results.get("macro", {}).get("analysis", "")
-        sector_analysis = agents_results.get("sector", {}).get("analysis", "")
-        fund_analysis = agents_results.get("fund", {}).get("analysis", "")
-        sentiment_analysis = agents_results.get("sentiment", {}).get("analysis", "")
+        macro_analysis = self.deepseek_client.build_context_digest(
+            agents_results.get("macro", {}).get("analysis", ""),
+            max_chars=900
+        )
+        sector_analysis = self.deepseek_client.build_context_digest(
+            agents_results.get("sector", {}).get("analysis", ""),
+            max_chars=900
+        )
+        fund_analysis = self.deepseek_client.build_context_digest(
+            agents_results.get("fund", {}).get("analysis", ""),
+            max_chars=900
+        )
+        sentiment_analysis = self.deepseek_client.build_context_digest(
+            agents_results.get("sentiment", {}).get("analysis", ""),
+            max_chars=900
+        )
         
         prompt = f"""
 你是智策系统的首席策略官，现在需要综合四位专业分析师的报告，形成全面的市场和板块研判。
@@ -264,7 +303,8 @@ class SectorStrategyEngine:
    - 应该重点参考哪个维度的建议？
    - 需要警惕哪个维度的风险？
 
-请给出专业、全面的综合研判报告，体现多维度分析的价值。
+请给出专业、全面但简洁的综合研判报告，突出最关键结论、分歧、机会与风险。
+{self.deepseek_client.concise_output_instruction(750)}
 """
         
         messages = [
@@ -272,7 +312,9 @@ class SectorStrategyEngine:
             {"role": "user", "content": prompt}
         ]
         
-        report = self.deepseek_client.call_api(messages, max_tokens=5000)
+        report = self.deepseek_client.call_api(messages, max_tokens=1600)
+        if self.deepseek_client.is_api_error_message(report):
+            return report
         
         print("  ✓ 综合研判完成")
         return report
@@ -292,11 +334,13 @@ class SectorStrategyEngine:
         
         sectors_str = ", ".join(sectors_list) if sectors_list else "未知板块"
         
+        report_digest = self.deepseek_client.build_context_digest(comprehensive_report, max_chars=1400, max_lines=18)
+
         prompt = f"""
 基于前期的深度分析和综合研判，现在需要生成最终的板块预测报告。
 
 【综合研判结论】
-{comprehensive_report}
+{report_digest}
 
 【参考板块列表】
 {sectors_str}
@@ -398,7 +442,9 @@ class SectorStrategyEngine:
             {"role": "user", "content": prompt}
         ]
         
-        response = self.deepseek_client.call_api(messages, temperature=0.3, max_tokens=6000)
+        response = self.deepseek_client.call_api(messages, temperature=0.3, max_tokens=2800)
+        if self.deepseek_client.is_api_error_message(response):
+            return {"prediction_text": response}
         
         # 尝试解析JSON
         try:
@@ -604,4 +650,3 @@ if __name__ == "__main__":
     # 注意：这只是测试框架，实际运行需要真实数据和API key
     # results = engine.run_comprehensive_analysis(test_data)
     # print(f"\n分析结果: {results.get('success')}")
-

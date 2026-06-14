@@ -32,10 +32,10 @@ class SectorStrategyAgents:
         news_summary = ""
         if news_data:
             news_summary = "\n【重要财经新闻】\n"
-            for idx, news in enumerate(news_data[:30], 1):
+            for idx, news in enumerate(news_data[:12], 1):
                 news_summary += f"{idx}. [{news.get('publish_time', '')}] {news.get('title', '')}\n"
                 if news.get('content'):
-                    news_summary += f"   摘要: {news['content'][:200]}...\n"
+                    news_summary += f"   摘要: {news['content'][:80]}...\n"
         
         # 构建市场概况
         market_summary = ""
@@ -101,6 +101,7 @@ class SectorStrategyAgents:
    - 仓位管理建议
 
 请给出专业、深入的宏观策略分析报告。
+{self.deepseek_client.concise_output_instruction(650)}
 """
         
         messages = [
@@ -108,7 +109,7 @@ class SectorStrategyAgents:
             {"role": "user", "content": prompt}
         ]
         
-        analysis = self.deepseek_client.call_api(messages, max_tokens=4000)
+        analysis = self.deepseek_client.call_api(messages, max_tokens=1500)
         
         print("  ✓ 宏观策略师分析完成")
         
@@ -140,15 +141,15 @@ class SectorStrategyAgents:
             sector_summary = f"""
 【行业板块表现】(共 {len(sectors_data)} 个板块)
 
-涨幅榜 TOP15:
+涨幅榜 TOP10:
 """
-            for idx, (name, info) in enumerate(sorted_sectors[:15], 1):
+            for idx, (name, info) in enumerate(sorted_sectors[:10], 1):
                 sector_summary += f"{idx}. {name}: {info['change_pct']:+.2f}% | 换手率: {info['turnover']:.2f}% | 领涨股: {info['top_stock']} ({info['top_stock_change']:+.2f}%) | 涨跌家数: {info['up_count']}/{info['down_count']}\n"
             
             sector_summary += f"""
-跌幅榜 TOP10:
+跌幅榜 TOP6:
 """
-            for idx, (name, info) in enumerate(sorted_sectors[-10:], 1):
+            for idx, (name, info) in enumerate(sorted_sectors[-6:], 1):
                 sector_summary += f"{idx}. {name}: {info['change_pct']:+.2f}% | 换手率: {info['turnover']:.2f}% | 领跌股: {info['top_stock']} ({info['top_stock_change']:+.2f}%) | 涨跌家数: {info['up_count']}/{info['down_count']}\n"
         
         # 构建概念板块数据
@@ -159,9 +160,9 @@ class SectorStrategyAgents:
             concept_summary = f"""
 【概念板块表现】(共 {len(concepts_data)} 个板块)
 
-热门概念 TOP15:
+热门概念 TOP10:
 """
-            for idx, (name, info) in enumerate(sorted_concepts[:15], 1):
+            for idx, (name, info) in enumerate(sorted_concepts[:10], 1):
                 concept_summary += f"{idx}. {name}: {info['change_pct']:+.2f}% | 换手率: {info['turnover']:.2f}% | 领涨股: {info['top_stock']} ({info['top_stock_change']:+.2f}%)\n"
         
         prompt = f"""
@@ -213,6 +214,7 @@ class SectorStrategyAgents:
    - 建议配置比例和持有周期
 
 请给出专业、详细的板块诊断报告。
+{self.deepseek_client.concise_output_instruction(700)}
 """
         
         messages = [
@@ -220,7 +222,7 @@ class SectorStrategyAgents:
             {"role": "user", "content": prompt}
         ]
         
-        analysis = self.deepseek_client.call_api(messages, max_tokens=4000)
+        analysis = self.deepseek_client.call_api(messages, max_tokens=1600)
         
         print("  ✓ 板块诊断师分析完成")
         
@@ -254,17 +256,17 @@ class SectorStrategyAgents:
             fund_flow_summary = f"""
 【板块资金流向】(更新时间: {fund_flow_data.get('update_time', 'N/A')})
 
-主力资金净流入 TOP15:
+主力资金净流入 TOP10:
 """
-            for idx, item in enumerate(sorted_inflow[:15], 1):
+            for idx, item in enumerate(sorted_inflow[:10], 1):
                 fund_flow_summary += f"{idx}. {item['sector']}: {item['main_net_inflow']:.2f}万 ({item['main_net_inflow_pct']:+.2f}%) | 涨跌: {item['change_pct']:+.2f}% | 超大单: {item['super_large_net_inflow']:.2f}万\n"
             
             # 净流出前10
             sorted_outflow = sorted(flow_list, key=lambda x: x["main_net_inflow"])
             fund_flow_summary += f"""
-主力资金净流出 TOP10:
+主力资金净流出 TOP6:
 """
-            for idx, item in enumerate(sorted_outflow[:10], 1):
+            for idx, item in enumerate(sorted_outflow[:6], 1):
                 fund_flow_summary += f"{idx}. {item['sector']}: {item['main_net_inflow']:.2f}万 ({item['main_net_inflow_pct']:+.2f}%) | 涨跌: {item['change_pct']:+.2f}%\n"
         
         # 构建北向资金数据
@@ -279,7 +281,7 @@ class SectorStrategyAgents:
 """
             if north_flow_data.get('history'):
                 north_summary += "\n近10日北向资金流向:\n"
-                for item in north_flow_data['history'][:10]:
+                for item in north_flow_data['history'][:5]:
                     north_summary += f"  {item['date']}: {item['net_inflow']:.2f}万\n"
         
         prompt = f"""
@@ -340,6 +342,7 @@ class SectorStrategyAgents:
    - 评估市场流动性状况
 
 请给出专业、深度的资金流向分析报告。
+{self.deepseek_client.concise_output_instruction(650)}
 """
         
         messages = [
@@ -347,7 +350,7 @@ class SectorStrategyAgents:
             {"role": "user", "content": prompt}
         ]
         
-        analysis = self.deepseek_client.call_api(messages, max_tokens=4000)
+        analysis = self.deepseek_client.call_api(messages, max_tokens=1500)
         
         print("  ✓ 资金流向分析师分析完成")
         
@@ -403,9 +406,9 @@ class SectorStrategyAgents:
             hot_sectors = f"""
 【板块热度排行】(按涨跌幅绝对值排序)
 
-最活跃板块 TOP10:
+最活跃板块 TOP8:
 """
-            for idx, (name, info) in enumerate(sorted_sectors[:10], 1):
+            for idx, (name, info) in enumerate(sorted_sectors[:8], 1):
                 hot_sectors += f"{idx}. {name}: {info['change_pct']:+.2f}% | 换手率: {info['turnover']:.2f}% | 涨跌家数: {info['up_count']}/{info['down_count']}\n"
         
         # 概念热度
@@ -415,9 +418,9 @@ class SectorStrategyAgents:
             hot_concepts = f"""
 【概念热度排行】
 
-最热概念 TOP10:
+最热概念 TOP8:
 """
-            for idx, (name, info) in enumerate(sorted_concepts[:10], 1):
+            for idx, (name, info) in enumerate(sorted_concepts[:8], 1):
                 hot_concepts += f"{idx}. {name}: {info['change_pct']:+.2f}% | 换手率: {info['turnover']:.2f}%\n"
         
         prompt = f"""
@@ -480,6 +483,7 @@ class SectorStrategyAgents:
    - 给出仓位管理建议
 
 请给出专业、客观的市场情绪分析报告，避免主观臆测。
+{self.deepseek_client.concise_output_instruction(600)}
 """
         
         messages = [
@@ -487,7 +491,7 @@ class SectorStrategyAgents:
             {"role": "user", "content": prompt}
         ]
         
-        analysis = self.deepseek_client.call_api(messages, max_tokens=4000)
+        analysis = self.deepseek_client.call_api(messages, max_tokens=1400)
         
         print("  ✓ 市场情绪解码员分析完成")
         
@@ -544,4 +548,3 @@ if __name__ == "__main__":
     result = agents.macro_strategist_agent(test_market_data, test_news)
     print(f"分析师: {result['agent_name']}")
     print(f"分析内容长度: {len(result['analysis'])} 字符")
-

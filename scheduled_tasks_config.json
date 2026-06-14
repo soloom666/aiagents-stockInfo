@@ -1,0 +1,52 @@
+{
+  "main_force": {
+    "enabled": true,
+    "time": "08:00",
+    "schedule_type": "workday"
+  },
+  "sector_strategy": {
+    "enabled": true,
+    "time": "08:30",
+    "schedule_type": "workday"
+  },
+  "longhubang": {
+    "enabled": true,
+    "time": "08:10",
+    "schedule_type": "workday"
+  },
+  "xunlong": {
+    "enabled": true,
+    "time": "08:30",
+    "schedule_type": "workday"
+  },
+  "check_notice": {
+    "enabled": true,
+    "time": "08:00",
+    "schedule_type": "daily"
+  },
+  "check_house": {
+    "enabled": true,
+    "time": "08:00",
+    "schedule_type": "daily"
+  },
+  "custom_tasks": [
+    {
+      "task_id": "custom_1778669695853",
+      "name": "长线投资任务",
+      "function": "long_term_investment",
+      "data_source": "全量",
+      "time": "20:00",
+      "enabled": true,
+      "schedule_type": "workday"
+    },
+    {
+      "task_id": "custom_1778669716670",
+      "name": "寻龙记复测任务",
+      "function": "xunlong_review",
+      "data_source": "全量",
+      "time": "19:00",
+      "enabled": true,
+      "schedule_type": "workday"
+    }
+  ]
+}

@@ -127,7 +127,7 @@ def display_batch_history():
                         if col in df.columns:
                             df[col] = df[col].astype(str)
                     
-                    st.dataframe(df, width='content')
+                    st.dataframe(df)
                     
                     # 显示详细分析（可展开）
                     with st.expander("📊 查看详细分析报告"):
@@ -159,7 +159,7 @@ def display_batch_history():
                         })
                     
                     df_fail = pd.DataFrame(fail_data)
-                    st.dataframe(df_fail, width='content')
+                    st.dataframe(df_fail)
                 
                 # 操作按钮
                 col_del, col_reload = st.columns([1, 1])
@@ -190,4 +190,3 @@ def display_batch_history():
         st.error(f"❌ 获取历史记录失败: {str(e)}")
         import traceback
         st.code(traceback.format_exc())
-

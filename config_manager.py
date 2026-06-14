@@ -17,7 +17,7 @@ class ConfigManager:
             "DEEPSEEK_API_KEY": {
                 "value": "",
                 "description": "DeepSeek API密钥",
-                "required": True,
+                "required": False,
                 "type": "password"
             },
             "DEEPSEEK_BASE_URL": {
@@ -237,10 +237,10 @@ class ConfigManager:
             if info["required"] and not config.get(key):
                 return False, f"必填项 {info['description']} 不能为空"
         
-        # 验证API Key格式（简单检查长度）
+        # 验证历史兼容API Key格式（如填写则校验）
         if config.get("DEEPSEEK_API_KEY"):
             api_key = config.get("DEEPSEEK_API_KEY", "")
-            if len(api_key) < 20:
+            if len(api_key) < 10:
                 return False, "DeepSeek API Key格式不正确（长度太短）"
         
         return True, "配置验证通过"
@@ -254,4 +254,3 @@ class ConfigManager:
 
 # 全局配置管理器实例
 config_manager = ConfigManager()
-

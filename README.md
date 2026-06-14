@@ -1,14 +1,52 @@
 # 📚 文档中心
 
-本目录包含复合多AI智能体股票团队分析系统的所有文档。
+本目录包含AI智能体股票团队分析系统的所有文档。
+
+确认模式claude： claude --dangerously-skip-permissions
+确认模式codex：   codex --full-auto   
+默认yes”，但不要彻底关掉沙箱，可以用： codex --sandbox workspace-write --ask-for-approval never                                                                                                                                             
+
+
 
 ### 本地启动
- conda activate aistock
+conda activate aistock
 streamlit run app.py
 
 
 [//]: # (安装依赖)
-pip install -r requirements.txt -i  https://pypi.tuna.tsinghua.edu.cn/simple
+python -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+### Python版本说明
+- 推荐使用 `Python 3.12.x`
+- 主应用安装：`python -m pip install -r requirements.txt`
+- 量化扩展和“寻龙记”功能额外安装：`python -m pip install -r requirements-quant.txt`
+- 如果你当前是 `Python 3.14`，建议先切换到 `Python 3.12` 再安装量化扩展依赖
+
+### Windows 虚拟环境初始化
+
+推荐直接执行仓库根目录下的 `setup_windows.ps1`：
+
+```powershell
+.\setup_windows.ps1
+```
+
+它会自动：
+- 创建 `.venv`
+- 用 `python -m pip install --upgrade pip` 升级虚拟环境内的 `pip`
+- 安装 `requirements.txt`
+
+如果你看到类似下面的报错：
+
+```text
+ERROR: To modify pip, please run the following command:
+...\python.exe -m pip install --upgrade pip
+```
+
+说明你是通过 `pip install --upgrade pip` 直接改 `pip`，请改用：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+```
 
 
 ### 启动系统  配置详情请看 [QUICK_START.md]
@@ -16,12 +54,12 @@ pip install -r requirements.txt -i  https://pypi.tuna.tsinghua.edu.cn/simple
 #### Linux  阿里云服务器
 ```bash
 启动：
-nohup streamlit run app.py > /opt/logs/streamlit.log 2>&1 &
+nohup python3 -m streamlit run app.py > /opt/logs/streamlit.log 2>&1 &
 
 
 重启： 
-pkill -f "streamlit run app.py" & ps aux | grep streamlit
-nohup streamlit run app.py > /opt/logs/streamlit.log 2>&1 &
+pkill -f "python.*-m streamlit run app.py" &ps aux | grep streamlit
+nohup python3 -m streamlit run app.py > /opt/logs/streamlit.log 2>&1 &
 
 ```
 
@@ -233,4 +271,3 @@ docker run -d -p 8501:8501 --name aiagents-stockinfo aiagents-stockinfo
 ---
 
 **📝 提示**：所有文档均已从项目根目录迁移至 `docs/` 目录，便于统一管理和查找。
-

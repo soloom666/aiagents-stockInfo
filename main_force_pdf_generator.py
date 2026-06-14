@@ -450,7 +450,5 @@ def display_report_download_section(analyzer, result):
             label="📥 下载候选股票CSV",
             data=csv,
             file_name=csv_filename,
-            mime="text/csv",
-            width='content'
+            mime="text/csv"
         )
-

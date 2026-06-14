@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from smart_monitor_engine import SmartMonitorEngine
 from smart_monitor_db import SmartMonitorDB
 from config_manager import config_manager  # 使用主程序的配置管理器
+from auth import get_runtime_llm_config
 
 
 # 加载环境变量
@@ -31,7 +32,7 @@ def smart_monitor_ui():
         
         **第一步：环境配置**
         1. 点击左侧菜单"⚙️ 环境配置"
-        2. 填写 DeepSeek API Key（必需）
+        2. 为当前账号填写大模型 API Key（必需）
         3. 配置 miniQMT 账户（可选，用于实盘交易）
         4. 配置通知方式（可选，邮件/Webhook）
         
@@ -105,7 +106,7 @@ def smart_monitor_ui():
         
         ### 📞 常见问题
         
-        **Q: 提示"DeepSeek API调用失败"？**
+        **Q: 提示"大模型 API调用失败"？**
         - 检查API Key是否正确
         - 确认API账户余额充足
         - 检查网络连接
@@ -146,7 +147,7 @@ def smart_monitor_ui():
             st.session_state.db = SmartMonitorDB()
         except Exception as e:
             st.error(f"初始化失败: {e}")
-            st.error("请先在'环境配置'中完成基础配置")
+            st.error("请先在'环境配置'中完成当前账号大模型配置")
             return
     
     # 创建标签页
@@ -357,7 +358,7 @@ def render_monitor_tasks():
                 notify_email = st.text_input("通知邮箱（可选）")
             
             # 添加任务按钮（表单提交按钮）
-            submitted = st.form_submit_button("➕ 添加任务", type="primary", width='stretch')
+            submitted = st.form_submit_button("➕ 添加任务", type="primary", use_container_width=True)
         
         if submitted:
             # 验证必填项（form中直接使用局部变量）
@@ -570,7 +571,7 @@ def render_position_management():
             "profit_loss_pct": "盈亏%"
         },
         hide_index=True,
-        width='stretch'
+        use_container_width=True
     )
     
     # 单只股票操作
@@ -658,7 +659,7 @@ def render_history():
                     "profit_loss": "盈亏"
                 },
                 hide_index=True,
-                width='stretch'
+                use_container_width=True
             )
     
     # 通知记录
@@ -693,7 +694,8 @@ def render_settings():
     
     with col1:
         st.markdown("**🤖 DeepSeek API**")
-        api_key = config.get('DEEPSEEK_API_KEY', '')
+        llm_config = get_runtime_llm_config()
+        api_key = llm_config.get('api_key', '')
         if api_key:
             st.success(f"✅ 已配置（{api_key[:8]}...）")
         else:
@@ -900,4 +902,3 @@ def _render_task_kline_and_decisions(task: Dict, db: SmartMonitorDB, engine):
 
 if __name__ == '__main__':
     smart_monitor_ui()
-

@@ -1,7 +1,12 @@
-import openai
+from __future__ import annotations
+
 import json
+import re
+import math
 from typing import Dict, List, Any, Optional
 import configs as config
+from common.logger import logger as project_logger
+from auth import get_runtime_llm_config
 
 
 class DeepSeekClient:
@@ -9,25 +14,203 @@ class DeepSeekClient:
     
     def __init__(self, model="deepseek-chat"):
         self.model = model
-        self.client = openai.OpenAI(
-            api_key=config.DEEPSEEK_API_KEY,
-            base_url=config.DEEPSEEK_BASE_URL
+        self.logger = project_logger
+        self.client = None
+
+    def _get_client(self):
+        """延迟初始化 OpenAI 客户端，避免页面加载时因 SSL/证书问题直接崩溃。"""
+        if self.client is None:
+            try:
+                import openai
+            except ModuleNotFoundError as exc:
+                raise RuntimeError(
+                    "AI依赖缺失：未安装 openai 包，请在当前虚拟环境执行 `python -m pip install openai httpx certifi` 后重试。"
+                ) from exc
+
+            llm_config = get_runtime_llm_config()
+            if not llm_config["api_key"]:
+                raise RuntimeError("当前用户未配置大模型 API Key，请先到“环境配置”页面保存当前账号的大模型配置。")
+
+            self.client = openai.OpenAI(
+                api_key=llm_config["api_key"],
+                base_url=llm_config["base_url"]
+            )
+            if llm_config["model"]:
+                self.model = llm_config["model"]
+        return self.client
+
+    @staticmethod
+    def format_api_error(error: Exception | str) -> str:
+        """Normalize provider errors to user-facing messages."""
+        message = str(error)
+        if "Insufficient Balance" in message or "Error code: 402" in message:
+            return "AI服务暂不可用：API 账户余额不足（402 Insufficient Balance），请充值后重试。"
+        return f"API调用失败: {message}"
+
+    @staticmethod
+    def is_api_error_message(message: Any) -> bool:
+        """Check whether the returned text is an API failure message."""
+        if not isinstance(message, str):
+            return False
+        return message.startswith("API调用失败:") or message.startswith("AI服务暂不可用：")
+
+    @staticmethod
+    def is_balance_error_message(message: Any) -> bool:
+        """Check whether the returned text indicates insufficient balance."""
+        if not isinstance(message, str):
+            return False
+        return "余额不足" in message or "Insufficient Balance" in message or "Error code: 402" in message
+
+    @staticmethod
+    def normalize_text(text: Any) -> str:
+        """Normalize whitespace to avoid wasting tokens on formatting noise."""
+        if text is None:
+            return ""
+        normalized = str(text).replace("\r\n", "\n").replace("\r", "\n")
+        normalized = re.sub(r"[ \t]+", " ", normalized)
+        normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+        return normalized.strip()
+
+    @classmethod
+    def truncate_text(cls, text: Any, max_chars: int = 2000, suffix: str = "\n...(已截断)") -> str:
+        """Trim oversized text while keeping the prompt readable."""
+        normalized = cls.normalize_text(text)
+        if len(normalized) <= max_chars:
+            return normalized
+        if max_chars <= len(suffix):
+            return normalized[:max_chars]
+        return normalized[: max_chars - len(suffix)].rstrip() + suffix
+
+    @classmethod
+    def shrink_multiline_text(cls, text: Any, max_chars: int = 3200, max_lines: int = 40) -> str:
+        """Keep the leading high-signal lines from large datasets."""
+        normalized = cls.normalize_text(text)
+        if not normalized:
+            return ""
+
+        lines = [line.strip() for line in normalized.splitlines() if line.strip()]
+        if len(lines) > max_lines:
+            lines = lines[:max_lines] + ["...(其余记录省略)"]
+        return cls.truncate_text("\n".join(lines), max_chars=max_chars)
+
+    @classmethod
+    def build_context_digest(cls, text: Any, max_chars: int = 1200, max_lines: int = 14) -> str:
+        """Build a short digest for downstream prompts to avoid re-feeding full reports."""
+        normalized = cls.normalize_text(text)
+        if not normalized:
+            return ""
+
+        raw_lines = [line.strip() for line in normalized.splitlines() if line.strip()]
+        prioritized: List[str] = []
+        regular: List[str] = []
+
+        for line in raw_lines:
+            if re.match(r"^(【[^】]+】|#+\s|[-*•]\s|\d+[\.、\)]\s|[A-Za-z][A-Za-z _-]{1,30}:)", line):
+                prioritized.append(line)
+            else:
+                regular.append(line)
+
+        selected: List[str] = []
+        seen = set()
+        for bucket in (prioritized, regular):
+            for line in bucket:
+                compact_line = re.sub(r"\s+", " ", line)
+                if len(compact_line) > 180:
+                    compact_line = compact_line[:177].rstrip() + "..."
+                if compact_line in seen:
+                    continue
+                selected.append(compact_line)
+                seen.add(compact_line)
+                if len(selected) >= max_lines:
+                    break
+            if len(selected) >= max_lines:
+                break
+
+        digest_lines = []
+        for line in selected:
+            if re.match(r"^(【[^】]+】|#+\s|[-*•]\s|\d+[\.、\)])", line):
+                digest_lines.append(line)
+            else:
+                digest_lines.append(f"- {line}")
+        return cls.truncate_text("\n".join(digest_lines), max_chars=max_chars)
+
+    @staticmethod
+    def concise_output_instruction(word_limit: int = 700) -> str:
+        """Common instruction used to keep responses concise."""
+        return (
+            f"\n输出要求：\n"
+            f"1. 只保留对投资决策最重要的结论、证据、风险和建议。\n"
+            f"2. 使用简洁 Markdown 或短段落，避免重复表述。\n"
+            f"3. 若数据不足直接说明，不要展开泛泛背景。\n"
+            f"4. 总字数尽量控制在 {word_limit} 字以内。\n"
         )
+
+    @staticmethod
+    def estimate_tokens(text: Any) -> int:
+        """Rough token estimator for mixed Chinese/English text."""
+        normalized = DeepSeekClient.normalize_text(text)
+        if not normalized:
+            return 0
+        cjk_chars = len(re.findall(r"[\u4e00-\u9fff]", normalized))
+        other_chars = max(len(normalized) - cjk_chars, 0)
+        return cjk_chars + math.ceil(other_chars / 4)
+
+    @classmethod
+    def summarize_messages(cls, messages: List[Dict[str, str]]) -> Dict[str, int]:
+        """Summarize prompt size for logging."""
+        prompt_text = "\n".join(cls.normalize_text(message.get("content", "")) for message in messages)
+        return {
+            "message_count": len(messages),
+            "chars": len(prompt_text),
+            "estimated_tokens": cls.estimate_tokens(prompt_text)
+        }
+
+    @staticmethod
+    def extract_usage(response: Any) -> Dict[str, int]:
+        """Extract provider usage when available."""
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return {}
+
+        result = {}
+        for key in (
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "prompt_cache_hit_tokens",
+            "prompt_cache_miss_tokens"
+        ):
+            value = getattr(usage, key, None)
+            if value is not None:
+                result[key] = value
+        return result
         
     def call_api(self, messages: List[Dict[str, str]], model: Optional[str] = None, 
-                 temperature: float = 0.7, max_tokens: int = 2000) -> str:
+                 temperature: float = 0.7, max_tokens: int = 2000,
+                 include_reasoning: bool = False) -> str:
         """调用DeepSeek API"""
         # 使用实例的模型，如果没有传入则使用默认模型
         model_to_use = model or self.model
         
-        # 对于 reasoner 模型，自动增加 max_tokens
-        if "reasoner" in model_to_use.lower() and max_tokens <= 2000:
-            max_tokens = 8000  # reasoner 模型需要更多 tokens 来输出推理过程
+        # 对于 reasoner 模型，仅在需要展示推理链时放宽输出长度
+        if "reasoner" in model_to_use.lower():
+            max_tokens = max(max_tokens, 3000 if not include_reasoning else 5000)
+
+        normalized_messages = [
+            {
+                "role": message.get("role", "user"),
+                "content": self.normalize_text(message.get("content", ""))
+            }
+            for message in messages
+        ]
+        original_stats = self.summarize_messages(messages)
+        normalized_stats = self.summarize_messages(normalized_messages)
         
         try:
-            response = self.client.chat.completions.create(
+            client = self._get_client()
+            response = client.chat.completions.create(
                 model=model_to_use,
-                messages=messages,
+                messages=normalized_messages,
                 temperature=temperature,
                 max_tokens=max_tokens
             )
@@ -35,22 +218,39 @@ class DeepSeekClient:
             # 处理 reasoner 模型的响应
             message = response.choices[0].message
             
-            # reasoner 模型可能包含 reasoning_content（推理过程）和 content（最终答案）
-            # 我们返回完整内容，包括推理过程（如果有的话）
             result = ""
             
-            # 检查是否有推理内容
-            if hasattr(message, 'reasoning_content') and message.reasoning_content:
+            if include_reasoning and hasattr(message, 'reasoning_content') and message.reasoning_content:
                 result += f"【推理过程】\n{message.reasoning_content}\n\n"
             
-            # 添加最终内容
             if message.content:
-                result += message.content
+                result += self.normalize_text(message.content)
+
+            output_stats = {
+                "chars": len(result),
+                "estimated_tokens": self.estimate_tokens(result)
+            }
+            usage_stats = self.extract_usage(response)
+            self.logger.info(
+                "[LLM] model=%s msgs=%s prompt_chars=%s normalized_prompt_chars=%s "
+                "prompt_est_tokens=%s normalized_prompt_est_tokens=%s "
+                "completion_chars=%s completion_est_tokens=%s max_tokens=%s usage=%s",
+                model_to_use,
+                original_stats["message_count"],
+                original_stats["chars"],
+                normalized_stats["chars"],
+                original_stats["estimated_tokens"],
+                normalized_stats["estimated_tokens"],
+                output_stats["chars"],
+                output_stats["estimated_tokens"],
+                max_tokens,
+                usage_stats or "n/a"
+            )
             
             return result if result else "API返回空响应"
             
         except Exception as e:
-            return f"API调用失败: {str(e)}"
+            return self.format_api_error(e)
     
     def technical_analysis(self, stock_info: Dict, stock_data: Any, indicators: Dict) -> str:
         """技术面分析"""
@@ -88,6 +288,7 @@ class DeepSeekClient:
 7. 关键技术位分析
 
 请给出专业、详细的技术分析报告，包含风险提示。
+{self.concise_output_instruction(500)}
 """
         
         messages = [
@@ -95,7 +296,7 @@ class DeepSeekClient:
             {"role": "user", "content": prompt}
         ]
         
-        return self.call_api(messages)
+        return self.call_api(messages, max_tokens=1200)
     
     def fundamental_analysis(self, stock_info: Dict, financial_data: Dict = None, quarterly_data: Dict = None) -> str:
         """基本面分析"""
@@ -147,7 +348,7 @@ class DeepSeekClient:
             quarterly_section = f"""
 
 【最近8期季报详细数据】
-{fetcher.format_quarterly_reports_for_ai(quarterly_data)}
+{self.shrink_multiline_text(fetcher.format_quarterly_reports_for_ai(quarterly_data), max_chars=2800, max_lines=36)}
 
 以上是通过akshare获取的最近8期季度财务报告，请重点基于这些数据进行趋势分析。
 """
@@ -229,6 +430,7 @@ class DeepSeekClient:
 - 结合当前市场环境和行业发展趋势
 
 请给出专业、详细的基本面分析报告。
+{self.concise_output_instruction(700)}
 """
         
         messages = [
@@ -236,7 +438,7 @@ class DeepSeekClient:
             {"role": "user", "content": prompt}
         ]
         
-        return self.call_api(messages)
+        return self.call_api(messages, max_tokens=1600)
     
     def fund_flow_analysis(self, stock_info: Dict, indicators: Dict, fund_flow_data: Dict = None) -> str:
         """资金面分析"""
@@ -250,7 +452,7 @@ class DeepSeekClient:
             fund_flow_section = f"""
 
 【近20个交易日资金流向详细数据】
-{fetcher.format_fund_flow_for_ai(fund_flow_data)}
+{self.shrink_multiline_text(fetcher.format_fund_flow_for_ai(fund_flow_data), max_chars=2600, max_lines=34)}
 
 以上是通过akshare从东方财富获取的实际资金流向数据，请重点基于这些数据进行趋势分析。
 """
@@ -343,6 +545,7 @@ class DeepSeekClient:
 - 注意区分短期波动与趋势性变化
 
 请给出专业、详细、有深度的资金面分析报告。记住：要基于问财数据的实际内容进行分析，而不是假设！
+{self.concise_output_instruction(600)}
 """
         
         messages = [
@@ -350,11 +553,15 @@ class DeepSeekClient:
             {"role": "user", "content": prompt}
         ]
         
-        return self.call_api(messages, max_tokens=3000)
+        return self.call_api(messages, max_tokens=1400)
     
     def comprehensive_discussion(self, technical_report: str, fundamental_report: str, 
                                fund_flow_report: str, stock_info: Dict) -> str:
         """综合讨论"""
+        technical_digest = self.build_context_digest(technical_report, max_chars=900)
+        fundamental_digest = self.build_context_digest(fundamental_report, max_chars=900)
+        fund_flow_digest = self.build_context_digest(fund_flow_report, max_chars=900)
+
         prompt = f"""
 现在需要进行一场投资决策会议，你作为首席分析师，需要综合各位分析师的报告进行讨论。
 
@@ -364,13 +571,13 @@ class DeepSeekClient:
 - 当前价格：{stock_info.get('current_price', 'N/A')}
 
 技术面分析报告：
-{technical_report}
+{technical_digest}
 
 基本面分析报告：
-{fundamental_report}
+{fundamental_digest}
 
 资金面分析报告：
-{fund_flow_report}
+{fund_flow_digest}
 
 请作为首席分析师，综合以上三个维度的分析报告，进行深入讨论：
 
@@ -381,7 +588,8 @@ class DeepSeekClient:
 5. 不同投资周期的考量（短期、中期、长期）
 6. 市场情绪和预期管理
 
-请模拟一场专业的投资讨论会议，体现不同观点的碰撞和融合。
+请输出一份简明会议纪要，重点写结论、分歧、风险收益比和执行建议，不要展开冗长对话。
+{self.concise_output_instruction(550)}
 """
         
         messages = [
@@ -389,11 +597,13 @@ class DeepSeekClient:
             {"role": "user", "content": prompt}
         ]
         
-        return self.call_api(messages, max_tokens=6000)
+        return self.call_api(messages, max_tokens=1200)
     
     def final_decision(self, comprehensive_discussion: str, stock_info: Dict, 
                       indicators: Dict) -> Dict[str, Any]:
         """最终投资决策"""
+        discussion_digest = self.build_context_digest(comprehensive_discussion, max_chars=1200)
+
         prompt = f"""
 基于前期的综合分析讨论，现在需要做出最终的投资决策。
 
@@ -403,7 +613,7 @@ class DeepSeekClient:
 - 当前价格：{stock_info.get('current_price', 'N/A')}
 
 综合分析讨论结果：
-{comprehensive_discussion}
+{discussion_digest}
 
 当前关键技术位：
 - MA20：{indicators.get('ma20', 'N/A')}
@@ -422,7 +632,7 @@ class DeepSeekClient:
 8. 风险提示
 9. 仓位建议（轻仓/中等仓位/重仓）
 
-请以JSON格式输出决策结果，格式如下：
+请严格以 JSON 格式输出，不要附加说明文字，格式如下：
 {{
     "rating": "买入/持有/卖出",
     "target_price": "目标价位数字",
@@ -442,7 +652,7 @@ class DeepSeekClient:
             {"role": "user", "content": prompt}
         ]
         
-        response = self.call_api(messages, temperature=0.3, max_tokens=4000)
+        response = self.call_api(messages, temperature=0.3, max_tokens=900)
         
         try:
             # 尝试解析JSON响应

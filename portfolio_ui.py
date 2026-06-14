@@ -286,7 +286,7 @@ def display_batch_analysis():
         )
     
     # 立即分析按钮
-    if st.button("🚀 立即开始分析", type="primary", width='content'):
+    if st.button("🚀 立即开始分析", type="primary"):
         with st.spinner("正在批量分析持仓股票..."):
             # 显示进度
             progress_bar = st.progress(0)
@@ -551,7 +551,7 @@ def display_scheduler_management():
         with col_add:
             st.write("")  # 占位，对齐按钮
             st.write("")
-            if st.button("➕ 添加", type="primary", width='content'):
+            if st.button("➕ 添加", type="primary"):
                 time_str = new_time.strftime("%H:%M")
                 if portfolio_scheduler.add_schedule_time(time_str):
                     st.success(f"已添加 {time_str}")
@@ -631,20 +631,20 @@ def display_scheduler_management():
     
     with col_btn1:
         if is_running:
-            if st.button("⏹️ 停止调度器", type="secondary", width='content'):
+            if st.button("⏹️ 停止调度器", type="secondary"):
                 portfolio_scheduler.stop_scheduler()
                 st.success("调度器已停止")
                 time.sleep(0.5)
                 st.rerun()
         else:
-            if st.button("▶️ 启动调度器", type="primary", width='content'):
+            if st.button("▶️ 启动调度器", type="primary"):
                 portfolio_scheduler.start_scheduler()
                 st.success("调度器已启动")
                 time.sleep(0.5)
                 st.rerun()
     
     with col_btn2:
-        if st.button("🚀 立即执行一次", type="primary", width='content'):
+        if st.button("🚀 立即执行一次", type="primary"):
             with st.spinner("正在执行持仓分析..."):
                 try:
                     portfolio_scheduler.run_analysis_now()
@@ -653,7 +653,7 @@ def display_scheduler_management():
                     st.error(f"执行失败: {str(e)}")
     
     with col_btn3:
-        if st.button("🔄 刷新状态", width='content'):
+        if st.button("🔄 刷新状态"):
             st.rerun()
 
 
@@ -769,4 +769,3 @@ def display_history_record(record: Dict):
             st.info(summary)
         
         st.caption(f"置信度: {confidence}%")
-

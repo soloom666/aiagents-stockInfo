@@ -2,9 +2,12 @@ import streamlit as st
 import plotly.graph_objects as go
 import time
 import os
-# 从新的配置文件导入model_options
-from model_config import model_options
-
+import subprocess
+import sys
+import re
+import ast
+# 从新的配置文件导入模型配置
+from model_config import model_options, get_model_label, build_model_options_with_current
 from stock_data import StockDataFetcher
 from ai_agents import StockAnalysisAgents
 from pdf_generator import display_pdf_export_section
@@ -16,11 +19,13 @@ from main_force_ui import display_main_force_selector
 from sector_strategy_ui import display_sector_strategy
 from longhubang_ui import display_longhubang
 from smart_monitor_ui import smart_monitor_ui
-from auth_ui import is_logged_in, show_login_page, show_sidebar_user_info, show_user_management
+from auth_ui import is_logged_in, show_login_page, show_sidebar_user_info, show_user_management, current_user
+from auth import get_runtime_llm_config, update_user_llm_config
+from scheduled_tasks_ui import display_scheduled_tasks
 
 # 页面配置
 st.set_page_config(
-    page_title="复合多AI智能体股票团队分析系统",
+    page_title="AI智能体股票团队分析系统",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -31,17 +36,28 @@ def model_selector():
     """模型选择器"""
     st.sidebar.markdown("---")
     st.sidebar.subheader("🤖 AI模型选择")
-
-
+    llm_config = get_runtime_llm_config()
+    default_model = llm_config.get("model", "deepseek-chat")
+    model_options_map = build_model_options_with_current(default_model)
+    model_keys = list(model_options_map.keys())
+    default_index = model_keys.index(default_model) if default_model in model_keys else 0
 
     selected_model = st.sidebar.selectbox(
         "选择AI模型",
-        options=list(model_options.keys()),
-        format_func=lambda x: model_options[x],
+        options=model_keys,
+        index=default_index,
+        format_func=get_model_label,
         help="DeepSeek Reasoner提供更强的推理能力，但响应时间可能更长"
     )
 
     return selected_model
+
+
+def _reset_user_llm_form_fields(prefix: str) -> None:
+    """切换到自定义模型时，清空同区域相关输入项。"""
+    st.session_state[f"{prefix}_api_key"] = ""
+    st.session_state[f"{prefix}_base_url"] = ""
+    st.session_state[f"{prefix}_custom_model"] = ""
 
 # 自定义CSS样式 - 专业版
 st.markdown("""
@@ -281,7 +297,7 @@ def main():
     # 顶部标题栏
     st.markdown("""
     <div class="top-nav">
-        <h1 class="nav-title">📈 复合多AI智能体股票团队分析系统</h1>
+        <h1 class="nav-title">📈 AI智能体股票团队分析系统</h1>
         <p class="nav-subtitle">基于DeepSeek的专业量化投资分析平台 | Multi-Agent Stock Analysis System</p>
     </div>
     """, unsafe_allow_html=True)
@@ -292,10 +308,11 @@ def main():
         st.markdown("### 🔍 功能导航")
 
         # 🏠 单股分析（首页）
-        if st.button("🏠 股票分析", width='stretch', key="nav_home", help="返回首页，进行单只股票的深度分析"):
+        if st.button("🏠 股票分析", use_container_width=True, key="nav_home", help="返回首页，进行单只股票的深度分析"):
             # 清除所有功能页面标志
             for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
-                       'show_sector_strategy', 'show_longhubang', 'show_portfolio']:
+                       'show_sector_strategy', 'show_longhubang', 'show_portfolio',
+                       'show_scheduled_tasks']:
                 if key in st.session_state:
                     del st.session_state[key]
 
@@ -305,7 +322,7 @@ def main():
         with st.expander("🎯 选股板块", expanded=True):
             st.markdown("**根据不同策略筛选优质股票**")
 
-            if st.button("💰 主力选股", width='stretch', key="nav_main_force", help="基于主力资金流向的选股策略"):
+            if st.button("💰 主力选股", use_container_width=True, key="nav_main_force", help="基于主力资金流向的选股策略"):
                 st.session_state.show_main_force = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_sector_strategy',
                            'show_longhubang', 'show_portfolio']:
@@ -316,14 +333,14 @@ def main():
         with st.expander("📊 策略分析", expanded=True):
             st.markdown("**AI驱动的板块和龙虎榜策略**")
 
-            if st.button("🎯 智策板块", width='stretch', key="nav_sector_strategy", help="AI板块策略分析"):
+            if st.button("🎯 智策板块", use_container_width=True, key="nav_sector_strategy", help="AI板块策略分析"):
                 st.session_state.show_sector_strategy = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
                            'show_longhubang', 'show_portfolio', 'show_smart_monitor']:
                     if key in st.session_state:
                         del st.session_state[key]
 
-            if st.button("🐉 智瞰龙虎", width='stretch', key="nav_longhubang", help="龙虎榜深度分析"):
+            if st.button("🐉 智瞰龙虎", use_container_width=True, key="nav_longhubang", help="龙虎榜深度分析"):
                 st.session_state.show_longhubang = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
                            'show_sector_strategy', 'show_portfolio', 'show_smart_monitor']:
@@ -334,42 +351,53 @@ def main():
         with st.expander("💼 投资管理", expanded=True):
             st.markdown("**持仓跟踪与实时监测**")
 
-            if st.button("📊 持仓分析", width='stretch', key="nav_portfolio", help="投资组合分析与定时跟踪"):
+            if st.button("📊 持仓分析", use_container_width=True, key="nav_portfolio", help="投资组合分析与定时跟踪"):
                 st.session_state.show_portfolio = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
                            'show_sector_strategy', 'show_longhubang', 'show_smart_monitor']:
                     if key in st.session_state:
                         del st.session_state[key]
 
-            if st.button("🤖 AI盯盘", width='stretch', key="nav_smart_monitor", help="DeepSeek AI自动盯盘决策交易（支持A股T+1）"):
+            if st.button("🤖 AI盯盘", use_container_width=True, key="nav_smart_monitor", help="DeepSeek AI自动盯盘决策交易（支持A股T+1）"):
                 st.session_state.show_smart_monitor = True
                 for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
                            'show_sector_strategy', 'show_longhubang', 'show_portfolio']:
                     if key in st.session_state:
                         del st.session_state[key]
 
-            if st.button("📡 实时监测", width='stretch', key="nav_monitor", help="价格监控与预警提醒"):
+            if st.button("📡 实时监测", use_container_width=True, key="nav_monitor", help="价格监控与预警提醒"):
                 st.session_state.show_monitor = True
                 for key in ['show_history', 'show_main_force', 'show_longhubang', 'show_portfolio',
                            'show_config', 'show_sector_strategy', 'show_smart_monitor']:
                     if key in st.session_state:
                         del st.session_state[key]
 
+        # ⏰ 定时任务
+        with st.expander("⏰ 定时任务", expanded=False):
+            st.markdown("**工作日自动执行选股分析**")
+            if st.button("⏰ 定时任务管理", use_container_width=True, key="nav_scheduled_tasks", help="配置工作日定时自动运行主力选股、龙虎榜等任务"):
+                st.session_state.show_scheduled_tasks = True
+                for key in ['show_history', 'show_monitor', 'show_config', 'show_main_force',
+                            'show_sector_strategy', 'show_longhubang', 'show_portfolio',
+                            'show_smart_monitor']:
+                    if key in st.session_state:
+                        del st.session_state[key]
+
         st.markdown("---")
 
         # 📖 历史记录
-        if st.button("📖 历史记录", width='stretch', key="nav_history", help="查看历史分析记录"):
+        if st.button("📖 历史记录", use_container_width=True, key="nav_history", help="查看历史分析记录"):
             st.session_state.show_history = True
             for key in ['show_monitor', 'show_longhubang', 'show_portfolio', 'show_config',
-                       'show_main_force', 'show_sector_strategy']:
+                       'show_main_force', 'show_sector_strategy', 'show_scheduled_tasks']:
                 if key in st.session_state:
                     del st.session_state[key]
 
         # ⚙️ 环境配置
-        if st.button("⚙️ 环境配置", width='stretch', key="nav_config", help="系统设置与API配置"):
+        if st.button("⚙️ 环境配置", use_container_width=True, key="nav_config", help="系统设置与API配置"):
             st.session_state.show_config = True
             for key in ['show_history', 'show_monitor', 'show_main_force', 'show_sector_strategy',
-                       'show_longhubang', 'show_portfolio']:
+                       'show_longhubang', 'show_portfolio', 'show_scheduled_tasks']:
                 if key in st.session_state:
                     del st.session_state[key]
 
@@ -383,8 +411,8 @@ def main():
         if api_key_status:
             st.success("✅ API已连接")
         else:
-            st.error("❌ API未配置")
-            st.caption("请在.env中配置API密钥")
+            st.error("❌ 当前用户未配置大模型")
+            st.caption("请到“环境配置”中为当前账号填写 API Key / Base URL / 模型")
 
         st.markdown("---")
 
@@ -419,7 +447,7 @@ def main():
         period = st.selectbox(
             "数据周期",
             ["1y", "6mo", "3mo", "1mo"],
-            index=0,
+            index=3,
             help="选择历史数据的时间范围"
         )
 
@@ -496,6 +524,11 @@ def main():
         display_config_manager()
         return
 
+    # 检查是否显示定时任务
+    if st.session_state.get('show_scheduled_tasks'):
+        display_scheduled_tasks()
+        return
+
     # 主界面
     # 添加单个/批量分析切换
     col_mode1, col_mode2 = st.columns([1, 3])
@@ -531,10 +564,10 @@ def main():
             )
 
         with col2:
-            analyze_button = st.button("🚀 开始分析", type="primary", width='stretch')
+            analyze_button = st.button("🚀 开始分析", type="primary", use_container_width=True)
 
         with col3:
-            if st.button("🔄 清除缓存", width='stretch'):
+            if st.button("🔄 清除缓存", use_container_width=True):
                 st.cache_data.clear()
                 st.success("缓存已清除")
 
@@ -549,13 +582,13 @@ def main():
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            analyze_button = st.button("🚀 开始批量分析", type="primary", width='stretch')
+            analyze_button = st.button("🚀 开始批量分析", type="primary", use_container_width=True)
         with col2:
-            if st.button("🔄 清除缓存", width='stretch'):
+            if st.button("🔄 清除缓存", use_container_width=True):
                 st.cache_data.clear()
                 st.success("缓存已清除")
         with col3:
-            if st.button("🗑️ 清除结果", width='stretch'):
+            if st.button("🗑️ 清除结果", use_container_width=True):
                 if 'batch_analysis_results' in st.session_state:
                     del st.session_state.batch_analysis_results
                 st.success("已清除批量分析结果")
@@ -718,11 +751,11 @@ def main():
         show_example_interface()
 
 def check_api_key():
-    """检查API密钥是否配置"""
+    """检查当前用户是否已配置可用的大模型 API Key"""
     try:
-        import configs
-        return bool(config.DEEPSEEK_API_KEY and config.DEEPSEEK_API_KEY.strip())
-    except:
+        llm_config = get_runtime_llm_config()
+        return bool(llm_config["api_key"])
+    except Exception:
         return False
 
 @st.cache_data(ttl=300)  # 缓存5分钟
@@ -1494,7 +1527,13 @@ def display_agents_analysis(agents_results):
 
             # 分析报告
             st.markdown("**📄 分析报告:**")
-            st.write(agent_result.get('analysis', '暂无分析'))
+            analysis_text = agent_result.get('analysis', '暂无分析')
+            if isinstance(analysis_text, str) and (
+                analysis_text.startswith("API调用失败:") or analysis_text.startswith("AI服务暂不可用：")
+            ):
+                st.warning(analysis_text)
+            else:
+                st.write(analysis_text)
 
 def display_team_discussion(discussion_result):
     """显示团队讨论"""
@@ -1620,7 +1659,7 @@ def show_example_interface():
         - NVDA (英伟达)
         """)
 
-    st.info("💡 提示：首次运行需要配置DeepSeek API Key，请在.env中设置DEEPSEEK_API_KEY")
+    st.info("💡 提示：首次使用请先到“环境配置”为当前登录账号配置大模型 API Key、Base URL 和模型。")
 
     st.markdown("---")
     st.markdown("""
@@ -1832,10 +1871,10 @@ def display_add_to_monitor_dialog(record):
             col_a, col_b, col_c = st.columns(3)
 
             with col_a:
-                submit = st.form_submit_button("✅ 确认加入监测", type="primary", width='stretch')
+                submit = st.form_submit_button("✅ 确认加入监测", type="primary", use_container_width=True)
 
             with col_b:
-                cancel = st.form_submit_button("❌ 取消", width='stretch')
+                cancel = st.form_submit_button("❌ 取消", use_container_width=True)
 
             if submit:
                 if new_entry_min > 0 and new_entry_max > 0 and new_entry_max > new_entry_min:
@@ -2041,7 +2080,7 @@ def display_record_detail(record_id):
         col1, col2 = st.columns([1, 3])
 
         with col1:
-            if st.button("➕ 加入监测", type="primary", width='stretch'):
+            if st.button("➕ 加入监测", type="primary", use_container_width=True):
                 st.session_state.add_to_monitor_id = record_id
                 st.rerun()
 
@@ -2054,14 +2093,219 @@ def display_record_detail(record_id):
             del st.session_state.add_to_monitor_id
         st.rerun()
 
+
+def _get_log_directory():
+    """返回系统日志目录。"""
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "log")
+
+
+def _extract_usage_dict(usage_text):
+    """解析 usage 日志文本。"""
+    if not usage_text or usage_text == "n/a":
+        return {}
+
+    try:
+        parsed = ast.literal_eval(usage_text)
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
+
+
+def _parse_llm_log_line(line):
+    """解析单条 LLM token 日志。"""
+    timestamp_match = re.match(r"^\[(?P<timestamp>[^\]]+)\]", line)
+    timestamp = timestamp_match.group("timestamp") if timestamp_match else ""
+    source = "smart-monitor" if "[LLM][smart-monitor]" in line else "general"
+
+    pattern = re.compile(
+        r"model=(?P<model>\S+)\s+"
+        r"msgs=(?P<msgs>\d+)\s+"
+        r"prompt_chars=(?P<prompt_chars>\d+)\s+"
+        r"(?:(?:normalized_prompt_chars=(?P<normalized_prompt_chars>\d+))\s+)?"
+        r"prompt_est_tokens=(?P<prompt_est_tokens>\d+)\s+"
+        r"(?:(?:normalized_prompt_est_tokens=(?P<normalized_prompt_est_tokens>\d+))\s+)?"
+        r"completion_chars=(?P<completion_chars>\d+)\s+"
+        r"completion_est_tokens=(?P<completion_est_tokens>\d+)\s+"
+        r"max_tokens=(?P<max_tokens>\d+)\s+"
+        r"usage=(?P<usage>.+)$"
+    )
+    match = pattern.search(line)
+    if not match:
+        return None
+
+    data = match.groupdict()
+    usage = _extract_usage_dict(data.get("usage", ""))
+    normalized_prompt_chars = int(data["normalized_prompt_chars"]) if data.get("normalized_prompt_chars") else int(data["prompt_chars"])
+    normalized_prompt_est_tokens = int(data["normalized_prompt_est_tokens"]) if data.get("normalized_prompt_est_tokens") else int(data["prompt_est_tokens"])
+
+    return {
+        "timestamp": timestamp,
+        "source": source,
+        "model": data["model"],
+        "msgs": int(data["msgs"]),
+        "prompt_chars": int(data["prompt_chars"]),
+        "normalized_prompt_chars": normalized_prompt_chars,
+        "prompt_est_tokens": int(data["prompt_est_tokens"]),
+        "normalized_prompt_est_tokens": normalized_prompt_est_tokens,
+        "completion_chars": int(data["completion_chars"]),
+        "completion_est_tokens": int(data["completion_est_tokens"]),
+        "max_tokens": int(data["max_tokens"]),
+        "usage": usage,
+        "usage_prompt_tokens": int(usage.get("prompt_tokens", 0) or 0),
+        "usage_completion_tokens": int(usage.get("completion_tokens", 0) or 0),
+        "usage_total_tokens": int(usage.get("total_tokens", 0) or 0),
+        "raw_line": line.strip()
+    }
+
+
+@st.cache_data(ttl=30)
+def _load_token_log_entries(log_filename):
+    """读取并解析指定日志文件中的 LLM 统计。"""
+    if not log_filename:
+        return []
+
+    log_dir = _get_log_directory()
+    log_path = os.path.join(log_dir, log_filename)
+    if not os.path.exists(log_path):
+        return []
+
+    entries = []
+    with open(log_path, "r", encoding="utf-8", errors="ignore") as file:
+        for raw_line in file:
+            if "[LLM]" not in raw_line:
+                continue
+            parsed = _parse_llm_log_line(raw_line)
+            if parsed:
+                entries.append(parsed)
+    return entries
+
+
+def display_token_log_panel():
+    """在环境配置页展示 token 统计日志。"""
+    log_dir = _get_log_directory()
+    if not os.path.exists(log_dir):
+        st.info("ℹ️ 尚未找到日志目录，触发一次 AI 分析后会生成 token 统计日志。")
+        return
+
+    log_files = sorted(
+        [file for file in os.listdir(log_dir) if file.endswith(".log")],
+        reverse=True
+    )
+
+    if not log_files:
+        st.info("ℹ️ 暂无 token 统计日志，触发一次 AI 分析后会显示。")
+        return
+
+    default_log = time.strftime("%Y%m%d") + ".log"
+    default_index = log_files.index(default_log) if default_log in log_files else 0
+
+    selected_log = st.selectbox(
+        "选择日志文件",
+        options=log_files,
+        index=default_index,
+        key="token_log_file_selector",
+        help="默认显示当天日志，可切换查看历史 token 统计。"
+    )
+
+    entries = _load_token_log_entries(selected_log)
+    if not entries:
+        st.info("ℹ️ 当前日志文件中还没有 `[LLM]` token 统计记录。")
+        return
+
+    total_calls = len(entries)
+    total_prompt_tokens = sum(item["normalized_prompt_est_tokens"] for item in entries)
+    total_completion_tokens = sum(item["completion_est_tokens"] for item in entries)
+    total_estimated_tokens = total_prompt_tokens + total_completion_tokens
+    total_actual_tokens = sum(item["usage_total_tokens"] for item in entries if item["usage_total_tokens"] > 0)
+    actual_usage_calls = sum(1 for item in entries if item["usage_total_tokens"] > 0)
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.metric("调用次数", total_calls)
+    with col2:
+        st.metric("估算输入Token", f"{total_prompt_tokens:,}")
+    with col3:
+        st.metric("估算输出Token", f"{total_completion_tokens:,}")
+    with col4:
+        st.metric("估算总Token", f"{total_estimated_tokens:,}")
+    with col5:
+        actual_display = f"{total_actual_tokens:,}" if total_actual_tokens else "暂无"
+        st.metric("API返回总Token", actual_display)
+
+    st.caption(
+        f"说明：估算值用于快速排查开销；API 实际 usage 已覆盖 {actual_usage_calls}/{total_calls} 次调用。"
+    )
+
+    model_summary = {}
+    source_summary = {}
+    for item in entries:
+        model_bucket = model_summary.setdefault(item["model"], {"calls": 0, "prompt": 0, "completion": 0, "actual": 0})
+        model_bucket["calls"] += 1
+        model_bucket["prompt"] += item["normalized_prompt_est_tokens"]
+        model_bucket["completion"] += item["completion_est_tokens"]
+        model_bucket["actual"] += item["usage_total_tokens"]
+
+        source_bucket = source_summary.setdefault(item["source"], {"calls": 0, "prompt": 0, "completion": 0})
+        source_bucket["calls"] += 1
+        source_bucket["prompt"] += item["normalized_prompt_est_tokens"]
+        source_bucket["completion"] += item["completion_est_tokens"]
+
+    st.markdown("#### 模型汇总")
+    model_rows = []
+    for model_name, stats in sorted(model_summary.items(), key=lambda x: x[1]["prompt"] + x[1]["completion"], reverse=True):
+        model_rows.append({
+            "模型": model_name,
+            "调用次数": stats["calls"],
+            "估算输入Token": stats["prompt"],
+            "估算输出Token": stats["completion"],
+            "估算总Token": stats["prompt"] + stats["completion"],
+            "API返回总Token": stats["actual"] or "-"
+        })
+    st.dataframe(model_rows, use_container_width=True, hide_index=True)
+
+    st.markdown("#### 来源汇总")
+    source_label_map = {
+        "general": "主分析链路",
+        "smart-monitor": "智能盯盘"
+    }
+    source_rows = []
+    for source_name, stats in sorted(source_summary.items(), key=lambda x: x[1]["prompt"] + x[1]["completion"], reverse=True):
+        source_rows.append({
+            "来源": source_label_map.get(source_name, source_name),
+            "调用次数": stats["calls"],
+            "估算输入Token": stats["prompt"],
+            "估算输出Token": stats["completion"],
+            "估算总Token": stats["prompt"] + stats["completion"]
+        })
+    st.dataframe(source_rows, use_container_width=True, hide_index=True)
+
+    st.markdown("#### 最近调用记录")
+    recent_rows = []
+    for item in reversed(entries[-50:]):
+        recent_rows.append({
+            "时间": item["timestamp"],
+            "来源": source_label_map.get(item["source"], item["source"]),
+            "模型": item["model"],
+            "消息数": item["msgs"],
+            "估算输入Token": item["normalized_prompt_est_tokens"],
+            "估算输出Token": item["completion_est_tokens"],
+            "max_tokens": item["max_tokens"],
+            "API总Token": item["usage_total_tokens"] or "-"
+        })
+    st.dataframe(recent_rows, use_container_width=True, hide_index=True)
+
+    with st.expander("📄 查看原始 Token 日志"):
+        raw_text = "\n".join(item["raw_line"] for item in entries[-100:])
+        st.code(raw_text or "暂无日志", language="text")
+
 def display_config_manager():
     """显示环境配置管理界面"""
     st.subheader("⚙️ 环境配置管理")
 
     st.markdown("""
     <div class="agent-card">
-        <p>在这里可以配置系统的环境变量，包括API密钥、数据源配置、量化交易配置等。</p>
-        <p><strong>注意：</strong>配置修改后需要重启应用才能生效。</p>
+        <p>在这里可以配置当前账号的大模型，以及系统级的数据源、量化交易、通知等配置。</p>
+        <p><strong>注意：</strong>当前账号的大模型配置保存后立即生效；系统级配置仍可能需要重启应用。</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2074,57 +2318,87 @@ def display_config_manager():
     # 使用session_state保存临时配置
     if 'temp_config' not in st.session_state:
         st.session_state.temp_config = {key: info["value"] for key, info in config_info.items()}
+        st.session_state.temp_config["TUSHARE_TOKEN"] = ""
 
     with tab1:
-        st.markdown("### DeepSeek API配置")
-        st.markdown("DeepSeek是系统的核心AI引擎，必须配置才能使用分析功能。")
-        st.markdown("DeepSeek:https://api.deepseek.com/v1")
-        st.markdown("硅基流动:https://api.siliconflow.cn/v1")
-        st.markdown("火山引擎:https://ark.cn-beijing.volces.com/api/v3")
-        st.markdown("阿里:https://dashscope.aliyuncs.com/compatible-mode/v1")
+        st.markdown("### 当前账号大模型配置")
+        st.markdown("系统分析将优先使用当前登录用户的大模型配置，不再依赖 `.env` 中的大模型配置。")
+        user = current_user() or {}
+        current_llm_key = user.get("llm_api_key", "")
+        current_llm_base_url = user.get("llm_base_url", "")
+        current_llm_model = user.get("llm_model", "deepseek-chat")
+        model_options_map = build_model_options_with_current(current_llm_model)
+        model_keys = list(model_options_map.keys())
+        model_type_key = "input_user_llm_model_type"
+        api_key_input_key = "input_user_llm_api_key"
+        base_url_input_key = "input_user_llm_base_url"
+        custom_model_input_key = "input_user_llm_custom_model"
 
-    # DeepSeek API Key
-        api_key_info = config_info["DEEPSEEK_API_KEY"]
-        current_api_key = st.session_state.temp_config.get("DEEPSEEK_API_KEY", "")
+        if model_type_key not in st.session_state:
+            st.session_state[model_type_key] = current_llm_model if current_llm_model in model_keys else "__custom__"
+        if api_key_input_key not in st.session_state:
+            st.session_state[api_key_input_key] = current_llm_key
+        if base_url_input_key not in st.session_state:
+            st.session_state[base_url_input_key] = current_llm_base_url
+        if custom_model_input_key not in st.session_state:
+            st.session_state[custom_model_input_key] = current_llm_model if current_llm_model not in model_options else ""
+
+        previous_model_type = st.session_state.get("prev_input_user_llm_model_type", st.session_state[model_type_key])
+
+        selected_model_option = st.selectbox(
+            "🧠 模型类型",
+            options=model_keys,
+            index=model_keys.index(st.session_state[model_type_key]) if st.session_state[model_type_key] in model_keys else 0,
+            format_func=get_model_label,
+            key=model_type_key
+        )
+        if selected_model_option == "__custom__" and previous_model_type != "__custom__":
+            _reset_user_llm_form_fields("input_user_llm")
+            st.session_state[model_type_key] = "__custom__"
+        st.session_state["prev_input_user_llm_model_type"] = st.session_state[model_type_key]
 
         new_api_key = st.text_input(
-            f"🔑 {api_key_info['description']} {'*' if api_key_info['required'] else ''}",
-            value=current_api_key,
+            "🔑 当前账号 API Key *",
             type="password",
-            help="从 https://platform.deepseek.com 获取API密钥",
-            key="input_deepseek_api_key"
+            help="为当前登录账号配置专属大模型 Key",
+            key=api_key_input_key
         )
-        st.session_state.temp_config["DEEPSEEK_API_KEY"] = new_api_key
-
-        # 显示当前状态
-        if new_api_key:
-            masked_key = new_api_key[:8] + "*" * (len(new_api_key) - 12) + new_api_key[-4:] if len(new_api_key) > 12 else "***"
-            st.success(f"✅ API密钥已设置: {masked_key}")
-        else:
-            st.warning("⚠️ 未设置API密钥，系统无法使用AI分析功能")
-
-        st.markdown("---")
-
-        # DeepSeek Base URL
-        base_url_info = config_info["DEEPSEEK_BASE_URL"]
-        current_base_url = st.session_state.temp_config.get("DEEPSEEK_BASE_URL", "")
-
         new_base_url = st.text_input(
-            f"🌐 {base_url_info['description']}",
-            value=current_base_url,
-            help="一般无需修改，保持默认即可",
-            key="input_deepseek_base_url"
+            "🌐 当前账号 Base URL",
+            help="兼容 OpenAI 协议的接口地址",
+            key=base_url_input_key
         )
-        st.session_state.temp_config["DEEPSEEK_BASE_URL"] = new_base_url
+        custom_model_name = st.text_input(
+            "📝 自定义模型名",
+            disabled=selected_model_option != "__custom__",
+            placeholder="例如: gpt-5.4 / claude-3-opus / my-provider-model",
+            key=custom_model_input_key
+        )
+        new_user_model = custom_model_name.strip() if selected_model_option == "__custom__" else selected_model_option
 
-        st.info("💡 如何获取DeepSeek API密钥？\n\n1. 访问 https://platform.deepseek.com\n2. 注册/登录账号\n3. 进入API密钥管理页面\n4. 创建新的API密钥\n5. 复制密钥并粘贴到上方输入框")
+        if new_api_key:
+            masked_key = new_api_key[:8] + "*" * max(len(new_api_key) - 12, 0) + new_api_key[-4:] if len(new_api_key) > 12 else "***"
+            st.success(f"✅ 当前账号已配置 API Key: {masked_key}")
+        else:
+            st.warning("⚠️ 当前账号未配置 API Key，AI分析功能不可用")
+
+        if st.button("💾 保存当前账号大模型配置", type="primary", key="save_user_llm_btn"):
+            ok, msg = update_user_llm_config(user["id"], new_api_key, new_base_url, new_user_model)
+            (st.success if ok else st.error)(msg)
+            if ok:
+                st.session_state.selected_model = new_user_model
+                time.sleep(1)
+                st.rerun()
+
+        st.info("💡 如何获取兼容接口配置？\n\n1. 访问所用模型服务商控制台\n2. 创建 API Key\n3. 复制兼容 OpenAI 的 Base URL\n4. 选择可用模型名称后保存")
+        st.caption("系统级 `.env` 中的 `DEEPSEEK_API_KEY/DEEPSEEK_BASE_URL` 不再作为股票分析主调用配置，仅保留历史兼容字段。")
 
     with tab2:
         st.markdown("### Tushare数据接口（可选）")
         st.markdown("Tushare提供更丰富的A股财务数据，配置后可以获取更详细的财务分析。")
 
         tushare_info = config_info["TUSHARE_TOKEN"]
-        current_tushare = st.session_state.temp_config.get("TUSHARE_TOKEN", "")
+        current_tushare = ""
 
         new_tushare = st.text_input(
             f"🎫 {tushare_info['description']}",
@@ -2357,7 +2631,7 @@ def display_config_manager():
 
             # 测试连通按钮
             if new_webhook_enabled and new_webhook_url:
-                if st.button("🧪 测试Webhook连通", width='stretch', key="test_webhook_btn"):
+                if st.button("🧪 测试Webhook连通", use_container_width=True, key="test_webhook_btn"):
                     with st.spinner("正在发送测试消息..."):
                         # 临时更新配置
                         temp_env_backup = {}
@@ -2406,7 +2680,7 @@ def display_config_manager():
     col1, col2, col3, col4 = st.columns([1, 1, 1, 2])
 
     with col1:
-        if st.button("💾 保存配置", type="primary", width='stretch'):
+        if st.button("💾 保存配置", type="primary", use_container_width=True):
             # 验证配置
             is_valid, message = config_manager.validate_config(st.session_state.temp_config)
 
@@ -2431,19 +2705,25 @@ def display_config_manager():
                 st.error(f"❌ 配置验证失败: {message}")
 
     with col2:
-        if st.button("🔄 重置", width='stretch'):
+        if st.button("🔄 重置", use_container_width=True):
             # 重置为当前文件中的值
             st.session_state.temp_config = {key: info["value"] for key, info in config_info.items()}
+            st.session_state.temp_config["TUSHARE_TOKEN"] = ""
             st.success("✅ 已重置为当前配置")
             st.rerun()
 
     with col3:
-        if st.button("⬅️ 返回", width='stretch'):
+        if st.button("⬅️ 返回", use_container_width=True):
             if 'show_config' in st.session_state:
                 del st.session_state.show_config
             if 'temp_config' in st.session_state:
                 del st.session_state.temp_config
             st.rerun()
+
+    st.markdown("---")
+    st.subheader("📈 Token 统计日志")
+    st.caption("展示模型调用的估算 token、API usage 和最近调用记录，用于定位最耗费 token 的功能。")
+    display_token_log_panel()
 
     # 显示当前.env文件内容
     st.markdown("---")
@@ -2453,7 +2733,7 @@ def display_config_manager():
         st.code(f"""# AI股票分析系统环境配置
 # 由系统自动生成和管理
 
-# ========== DeepSeek API配置 ==========
+# ========== 历史 DeepSeek API配置（股票分析主流程已不再使用） ==========
 DEEPSEEK_API_KEY="{current_config.get('DEEPSEEK_API_KEY', '')}"
 DEEPSEEK_BASE_URL="{current_config.get('DEEPSEEK_BASE_URL', '')}"
 
@@ -2592,7 +2872,7 @@ def display_comparison_table(results):
     # 显示表格（不使用样式，避免matplotlib导入问题）
     st.dataframe(
         df,
-        width='stretch',
+        use_container_width=True,
         height=400
     )
 
@@ -2632,7 +2912,7 @@ def display_comparison_table(results):
         filtered_df = filtered_df.sort_values('RSI', ascending=False)
 
     if not filtered_df.empty:
-        st.dataframe(filtered_df, width='stretch')
+        st.dataframe(filtered_df, use_container_width=True)
     else:
         st.info("没有符合条件的股票")
 
@@ -2679,6 +2959,36 @@ def display_detailed_cards(results, period):
     except Exception as e:
         st.error(f"显示详细信息时出错: {str(e)}")
 
+def _has_streamlit_context():
+    """Return True when the script is already running under Streamlit."""
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        return get_script_run_ctx() is not None
+    except Exception:
+        return False
+
+
+def _launch_with_streamlit():
+    """Re-launch the current script with `streamlit run` when executed directly."""
+    script_path = os.path.abspath(__file__)
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "streamlit",
+            "run",
+            script_path,
+            "--server.port",
+            "8503",
+            "--server.address",
+            "0.0.0.0",
+        ],
+        check=True,
+    )
+
+
 if __name__ == "__main__":
-    main()
-    # 运行命令： streamlit run app.py
+    if _has_streamlit_context():
+        main()
+    else:
+        _launch_with_streamlit()

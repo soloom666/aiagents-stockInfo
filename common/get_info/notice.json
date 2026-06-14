@@ -1,0 +1,67 @@
+{
+  "queryTime": "2026-06-14 17:04:29",
+  "dateRange": {
+    "start": "2026-05-30",
+    "end": "2026-06-14"
+  },
+  "keywords": [
+    "保安",
+    "安保"
+  ],
+  "totalFound": 7,
+  "results": {
+    "招投标公告": {
+      "保安": [
+        {
+          "title": "【埃肯有机硅（广东）有限公司、埃肯有机硅材料（中山）有限公司保安服务采购】招标公告",
+          "url": "https://scm.esinochem.com/#/noticeDetail?id=2064614360191221762",
+          "auditDate": "2026-06-10T15:43:15.000+08:00",
+          "plateType": "招标系统公告"
+        }
+      ],
+      "安保": []
+    },
+    "非招投标公告": {
+      "保安": [
+        {
+          "title": "2026年广州南沙金茂万豪酒店保安外包服务采购公告",
+          "url": "https://scm.esinochem.com/#/noticeDetail?id=2063946798442369025",
+          "auditDate": "2026-06-08T19:30:37.000+08:00",
+          "plateType": "非招标公告"
+        },
+        {
+          "title": "（询比采购）【南通项目2026-2027年度保安保洁服务采购/1641-PS202606030719】采购公告",
+          "url": "https://scm.esinochem.com/#/noticeDetail?id=2062057865905983489",
+          "auditDate": "2026-06-03T14:24:41.000+08:00",
+          "plateType": "非招标公告"
+        },
+        {
+          "title": "（谈判采购）【C-20262990G02钢衬胶保安滤器采购/7121-PS202606020954】采购公告",
+          "url": "https://scm.esinochem.com/#/noticeDetail?id=2061991168700203010",
+          "auditDate": "2026-06-03T09:59:39.000+08:00",
+          "plateType": "非招标公告"
+        },
+        {
+          "title": "（询比采购）【中蓝晨光2026年设备零星维修维保安装技术服务/D473-PS202606020160】采购公告",
+          "url": "https://scm.esinochem.com/#/noticeDetail?id=2061628646010277889",
+          "auditDate": "2026-06-02T09:59:07.000+08:00",
+          "plateType": "非招标公告"
+        }
+      ],
+      "安保": [
+        {
+          "title": "（询比采购）【安保及消防服务询价/7583-PS202606081178】采购公告",
+          "url": "https://scm.esinochem.com/#/noticeDetail?id=2064960383962988545",
+          "auditDate": "2026-06-11T14:38:15.000+08:00",
+          "plateType": "非招标公告"
+        },
+        {
+          "title": "（询比采购）【2026股份公司安保系统耗材/7126-PS202606090775】采购公告",
+          "url": "https://scm.esinochem.com/#/noticeDetail?id=2064625829240262657",
+          "auditDate": "2026-06-10T16:28:51.000+08:00",
+          "plateType": "非招标公告"
+        }
+      ]
+    }
+  }
+}

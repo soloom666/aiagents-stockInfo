@@ -1,23 +1,38 @@
 """
 模型配置文件
-包含所有可用的AI模型选项
+包含所有可用的AI模型选项与自定义模型辅助方法
 """
 
-model_options = {
-    "deepseek-chat": "DeepSeek Chat (默认)",
-    "deepseek-reasoner": "DeepSeek Reasoner (推理增强)",
-    "qwen-plus": "qwen-plus (阿里百炼)",
-    "qwen-plus-latest": "qwen-plus-latest (阿里百炼)",
-    "qwen-flash": "qwen-flash (阿里百炼)",
-    "qwen-turbo": "qwen-turbo (阿里百炼)",
-    "qwen3-max": "qwen-max (阿里百炼)",
-    "qwen-long": "qwen-long (阿里百炼)",
-    "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B": "DeepSeek-R1 免费(硅基流动)",
-    "Qwen/Qwen2.5-7B-Instruct": "Qwen 免费(硅基流动)",
-    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus": "DeepSeek-V3.1-Terminus (硅基流动)",
-    "deepseek-ai/DeepSeek-R1": "DeepSeek-R1 (硅基流动)",
-    "Qwen/Qwen3-235B-A22B-Thinking-2507": "Qwen3-235B (硅基流动)",
-    "zai-org/GLM-4.6": "智谱(硅基流动)",
-    "Ring-1T": "蚂蚁百灵 (硅基流动)",
-    "step3": "阶跃星辰(硅基流动)"
+from typing import Dict
+
+
+model_options: Dict[str, str] = {
+    "__custom__": "自定义模型",
+    "deepseek-v4-pro": "DeepSeek V4 Pro",
+    "deepseek-v4-flash": "DeepSeek V4 Flash",
+    "deepseek-reasoner": "DeepSeek Reasoner",
+    "qwen3-max": "Qwen3 Max (阿里百炼)",
+    "gpt-5.4": "GPT-5.4 (OpenAI)",
+    "gpt-5.5": "GPT-5.5 (OpenAI)",
+    "claude-4-6-sonnet-latest": "Claude 4.6 Sonnet (Anthropic)",
+    "claude-sonnet-4-20250514": "Claude Sonnet 4 (Anthropic)",
+    "gemini-3.1-pro-preview": "Gemini 3.1 Pro Preview (Google)",
+    "gemini-3.1-flash": "Gemini 3.1 Flash (Google)"
 }
+
+
+def get_model_label(model_name: str) -> str:
+    """获取模型展示名。"""
+    if not model_name:
+        return "未设置"
+    if model_name in model_options:
+        return model_options[model_name]
+    return f"自定义: {model_name}"
+
+
+def build_model_options_with_current(current_model: str) -> Dict[str, str]:
+    """如果当前模型不在预设列表中，动态加入为自定义模型。"""
+    options = dict(model_options)
+    if current_model and current_model not in options and current_model != "__custom__":
+        options[current_model] = f"自定义: {current_model}"
+    return options

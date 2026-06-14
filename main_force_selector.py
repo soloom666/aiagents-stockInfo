@@ -165,27 +165,14 @@ class MainForceStockSelector:
         filtered_df = df.copy()
         
         # 1. 筛选区间涨跌幅（智能匹配列名）
-        # 优先精确匹配，按优先级查找
-        interval_pct_col = None
-        possible_interval_pct_names = [
-            '区间涨跌幅:前复权', 
-            '区间涨跌幅:前复权(%)', 
-            '区间涨跌幅(%)', 
-            '区间涨跌幅', 
-            '涨跌幅:前复权', 
-            '涨跌幅:前复权(%)',
-            '涨跌幅(%)',
-            '涨跌幅'
+        _pct_names = [
+            '区间涨跌幅:前复权', '区间涨跌幅:前复权(%)', '区间涨跌幅(%)',
+            '区间涨跌幅', '涨跌幅:前复权', '涨跌幅:前复权(%)', '涨跌幅(%)', '涨跌幅'
         ]
-        
-        # 优先精确匹配
-        for name in possible_interval_pct_names:
-            for col in df.columns:
-                if name in col:
-                    interval_pct_col = col
-                    break
-            if interval_pct_col:
-                break
+        interval_pct_col = next(
+            (col for name in _pct_names for col in df.columns if name in col),
+            None
+        )
         
         if interval_pct_col:
             print(f"\n使用字段: {interval_pct_col}")
@@ -252,19 +239,11 @@ class MainForceStockSelector:
             return df
         
         # 查找主力资金相关列（智能匹配）
-        main_fund_col = None
-        main_fund_patterns = [
-            '区间主力资金流向',      # 实际列名
-            '区间主力资金净流入',
-            '主力资金流向',
-            '主力资金净流入',
-            '主力净流入'
-        ]
-        for pattern in main_fund_patterns:
-            matching = [col for col in df.columns if pattern in col]
-            if matching:
-                main_fund_col = matching[0]
-                break
+        _fund_patterns = ['区间主力资金流向', '区间主力资金净流入', '主力资金流向', '主力资金净流入', '主力净流入']
+        main_fund_col = next(
+            (col for pattern in _fund_patterns for col in df.columns if pattern in col),
+            None
+        )
         
         if main_fund_col:
             print(f"\n使用字段排序: {main_fund_col}")
@@ -292,63 +271,53 @@ class MainForceStockSelector:
         """
         if df is None or df.empty:
             return []
-        
+
+        # 在循环外一次性查找列名，避免每行重复搜索
+        possible_names = [
+            '区间涨跌幅:前复权', '区间涨跌幅:前复权(%)', '区间涨跌幅(%)',
+            '区间涨跌幅', '涨跌幅:前复权', '涨跌幅:前复权(%)', '涨跌幅(%)', '涨跌幅'
+        ]
+        interval_pct_col = None
+        for name in possible_names:
+            for col in df.columns:
+                if name in col:
+                    interval_pct_col = col
+                    break
+            if interval_pct_col:
+                break
+
+        main_fund_patterns = [
+            '区间主力资金流向', '区间主力资金净流入',
+            '主力资金流向', '主力资金净流入', '主力净流入'
+        ]
+        main_fund_col = None
+        for pattern in main_fund_patterns:
+            matching = [col for col in df.columns if pattern in col]
+            if matching:
+                main_fund_col = matching[0]
+                break
+
+        score_cols = [col for col in df.columns if '评分' in col or '能力' in col]
+
         stock_list = []
-        
+
         for idx, row in df.iterrows():
             stock_data = {
                 'symbol': row.get('股票代码', 'N/A'),
                 'name': row.get('股票简称', 'N/A'),
                 'industry': row.get('所属同花顺行业', row.get('所属行业', 'N/A')),
                 'market_cap': row.get('总市值[20241209]', row.get('总市值', 'N/A')),
-                'range_change': None,
-                'main_fund_inflow': None,
+                'range_change': row.get(interval_pct_col, 'N/A') if interval_pct_col else None,
+                'main_fund_inflow': row.get(main_fund_col, 'N/A') if main_fund_col else None,
                 'pe_ratio': row.get('市盈率', 'N/A'),
                 'pb_ratio': row.get('市净率', 'N/A'),
                 'revenue': row.get('营业收入', row.get('营收', 'N/A')),
                 'net_profit': row.get('净利润', 'N/A'),
-                'scores': {},
+                'scores': {col: row.get(col, 'N/A') for col in score_cols},
                 'raw_data': row.to_dict()
             }
-            
-            # 提取区间涨跌幅（使用智能匹配）
-            interval_pct_col = None
-            possible_names = [
-                '区间涨跌幅:前复权', '区间涨跌幅:前复权(%)', '区间涨跌幅(%)', 
-                '区间涨跌幅', '涨跌幅:前复权', '涨跌幅:前复权(%)', '涨跌幅(%)', '涨跌幅'
-            ]
-            for name in possible_names:
-                for col in df.columns:
-                    if name in col:
-                        interval_pct_col = col
-                        break
-                if interval_pct_col:
-                    break
-            if interval_pct_col:
-                stock_data['range_change'] = row.get(interval_pct_col, 'N/A')
-            
-            # 提取主力资金（智能匹配）
-            main_fund_col = None
-            main_fund_patterns = [
-                '区间主力资金流向', '区间主力资金净流入', 
-                '主力资金流向', '主力资金净流入', '主力净流入'
-            ]
-            for pattern in main_fund_patterns:
-                matching = [col for col in df.columns if pattern in col]
-                if matching:
-                    main_fund_col = matching[0]
-                    break
-            if main_fund_col:
-                stock_data['main_fund_inflow'] = row.get(main_fund_col, 'N/A')
-            
-            # 提取评分
-            score_keywords = ['评分', '能力']
-            for col in df.columns:
-                if any(keyword in col for keyword in score_keywords):
-                    stock_data['scores'][col] = row.get(col, 'N/A')
-            
             stock_list.append(stock_data)
-        
+
         return stock_list
     
     def print_stock_summary(self, stock_list: List[Dict]):

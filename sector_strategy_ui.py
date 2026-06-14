@@ -10,10 +10,13 @@ from datetime import datetime, time as dt_time
 import time
 import json
 
+from deepseek_client import DeepSeekClient
+from long_term_investment_service import DATA_SOURCE_ALL, DATA_SOURCE_MY, DATA_SOURCE_UPLOAD, LongTermInvestmentService
 from sector_strategy_data import SectorStrategyDataFetcher
 from sector_strategy_engine import SectorStrategyEngine
 from sector_strategy_pdf import SectorStrategyPDFGenerator
 from sector_strategy_scheduler import sector_strategy_scheduler
+from xunlong_self_healing_service import XunlongSelfHealingService
 
 
 def _parse_json_field(value, default):
@@ -33,6 +36,47 @@ def _parse_json_field(value, default):
         return default
 
 
+def _run_long_term_ai_analysis(rows, summary, data_source, model="deepseek-chat"):
+    """对长线投资筛选结果做 AI 总结分析"""
+    if not rows:
+        return "暂无可分析的长线投资候选股。"
+
+    client = DeepSeekClient(model=model)
+    top_rows = rows[:10]
+    lines = []
+    for idx, row in enumerate(top_rows, start=1):
+        lines.append(
+            f"{idx}. {row.get('代码', '')} {row.get('名称', '')} | 综合评分 {row.get('综合评分', 'N/A')} | "
+            f"PE {row.get('PE', 'N/A')} | ROE {row.get('ROE', 'N/A')} | PEG {row.get('PEG', 'N/A')} | "
+            f"营收增速 {row.get('近3年营收增速', 'N/A')} | 数据完整性 {row.get('数据完整性', 'N/A')}"
+        )
+
+    prompt = f"""
+你是一名A股长线投资分析师，请基于以下长线投资筛选结果进行简洁、可操作的分析。
+
+数据源：{data_source}
+股票池数量：{summary.get('pool_size', 0)}
+预筛候选：{summary.get('prefiltered_count', 0)}
+最终入选：{summary.get('qualified_count', 0)}
+
+候选股列表（按综合评分排序，最多10只）：
+{chr(10).join(lines)}
+
+请输出：
+1. 这批候选股的整体特征总结
+2. 最值得优先关注的 3-5 只股票及原因
+3. 主要风险点或需要二次核实的地方
+4. 适合继续跟踪的排序建议
+{client.concise_output_instruction(650)}
+"""
+
+    messages = [
+        {"role": "system", "content": "你是一名注重估值、成长与盈利质量平衡的A股长线投资分析师。"},
+        {"role": "user", "content": prompt},
+    ]
+    return client.call_api(messages, temperature=0.3, max_tokens=1600)
+
+
 def display_sector_strategy():
     """显示智策板块分析主界面"""
     
@@ -46,13 +90,19 @@ def display_sector_strategy():
     st.markdown("---")
     
     # 创建标签页
-    tab1, tab2 = st.tabs(["📊 智策分析", "📋 历史报告"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 智策分析", "📋 历史报告", "📈 长线投资", "🧠 AI自愈"])
     
     with tab1:
         display_analysis_tab()
     
     with tab2:
         display_history_tab()
+
+    with tab3:
+        display_long_term_investment_tab()
+
+    with tab4:
+        display_self_healing_tab()
 
 
 def display_analysis_tab():
@@ -124,12 +174,12 @@ def display_analysis_tab():
     with col2:
         st.write("")
         st.write("")
-        analyze_button = st.button("🚀 开始智策分析", type="primary", width='content')
+        analyze_button = st.button("🚀 开始智策分析", type="primary")
     
     with col3:
         st.write("")
         st.write("")
-        if st.button("🔄 清除结果", width='content'):
+        if st.button("🔄 清除结果"):
             if 'sector_strategy_result' in st.session_state:
                 del st.session_state.sector_strategy_result
             st.success("已清除分析结果")
@@ -153,6 +203,185 @@ def display_analysis_tab():
             display_analysis_results(result)
         else:
             st.error(f"❌ 分析失败: {result.get('error', '未知错误')}")
+
+
+def display_long_term_investment_tab():
+    """显示长线投资标签页"""
+    st.markdown("### 📈 长线投资")
+    st.caption("支持全量、自选、附件导入三种数据源。附件模式支持 `xlsx/xls`，建议包含 `股票代码`、`股票简称`。")
+
+    service = LongTermInvestmentService()
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        data_source = st.selectbox("数据源", [DATA_SOURCE_ALL, DATA_SOURCE_MY, DATA_SOURCE_UPLOAD], key="long_term_source")
+    with col2:
+        limit = st.number_input("展示数量", min_value=10, max_value=200, value=50, step=10, key="long_term_limit")
+    with col3:
+        st.write("")
+        st.write("")
+        run_button = st.button("🚀 开始筛选", type="primary", key="run_long_term_screen")
+
+    uploaded_file = None
+    uploaded_name = ""
+    if data_source == DATA_SOURCE_UPLOAD:
+        with st.container(border=True):
+            st.markdown("#### 📎 附件导入分析")
+            uploaded_file = st.file_uploader(
+                "导入附件数据源",
+                type=["xlsx", "xls"],
+                key="long_term_upload_file",
+                help="支持包含 股票代码 / 股票简称 的 Excel 文件。",
+            )
+            uploaded_name = getattr(uploaded_file, "name", "")
+            if uploaded_name:
+                st.success(f"已选择附件：{uploaded_name}")
+            else:
+                st.warning("请先上传要分析的 Excel 附件，再点击“开始筛选”。")
+
+    if run_button:
+        if data_source == DATA_SOURCE_UPLOAD and uploaded_file is None:
+            st.info("请先上传要分析的 Excel 附件。")
+            return
+        with st.spinner("正在筛选长线投资标的..."):
+            st.session_state.long_term_result = service.screen(
+                data_source=data_source,
+                limit=int(limit),
+                uploaded_file=uploaded_file,
+            )
+            if "long_term_ai_result" in st.session_state:
+                del st.session_state["long_term_ai_result"]
+
+    result = st.session_state.get("long_term_result", {})
+    if not result:
+        return
+    if not result.get("success"):
+        st.error("❌ 长线投资筛选失败")
+        for err in result.get("errors", []):
+            st.warning(err)
+        return
+
+    summary = result.get("summary", {})
+    rows = result.get("rows", [])
+    stat1, stat2, stat3, stat4 = st.columns(4)
+    with stat1:
+        st.metric("股票池数量", summary.get("pool_size", 0))
+    with stat2:
+        st.metric("预筛候选", summary.get("prefiltered_count", 0))
+    with stat3:
+        st.metric("财报检测", summary.get("financial_checked_count", 0))
+    with stat4:
+        st.metric("筛选结果", summary.get("qualified_count", 0))
+
+    source_name = result.get("data_source", data_source)
+    source_desc = f"本次结果来源：{source_name}"
+    if source_name == DATA_SOURCE_UPLOAD and uploaded_name:
+        source_desc = f"{source_desc} | 附件：{uploaded_name}"
+    st.caption(f"生成时间：{result.get('generated_at', '—')} | {source_desc}")
+
+    with st.expander("📌 性能说明", expanded=False):
+        st.write("- 全量模式先按 PE、股性评分做预筛，再进入财报检测。")
+        st.write("- 财报阶段仅拉取长线投资实际使用的利润表与财务指标。")
+        st.write("- 同一轮筛选结果会复用内存缓存，减少重复请求。")
+
+    with st.expander("📌 筛选规则", expanded=False):
+        for rule in summary.get("rules", []):
+            st.write(f"- {rule}")
+
+    if rows:
+        df = pd.DataFrame(rows)
+        preferred_cols = [
+            "代码", "名称", "数据源", "股性评分", "PE", "ROE", "PEG",
+            "近3年营收增速", "综合评分", "估值评分", "盈利评分", "成长评分",
+            "PEG评分", "数据完整性", "命中条件说明",
+        ]
+        shown_cols = [col for col in preferred_cols if col in df.columns]
+        st.dataframe(df[shown_cols], use_container_width=True, hide_index=True)
+
+        st.markdown("#### 🤖 AI分析")
+        ai_col1, ai_col2 = st.columns([1, 4])
+        with ai_col1:
+            ai_button = st.button("🧠 AI解读候选股", key="run_long_term_ai")
+        with ai_col2:
+            current_model = st.session_state.get("selected_model", "deepseek-chat")
+            st.caption(f"当前模型：{current_model}。将对当前候选股做组合级总结和重点标的解读。")
+
+        if ai_button:
+            with st.spinner("AI 正在分析长线投资候选股..."):
+                st.session_state.long_term_ai_result = _run_long_term_ai_analysis(
+                    rows=rows,
+                    summary=summary,
+                    data_source=source_name,
+                    model=current_model,
+                )
+
+        ai_result = st.session_state.get("long_term_ai_result")
+        if ai_result:
+            if isinstance(ai_result, str) and (
+                ai_result.startswith("API调用失败:") or ai_result.startswith("AI服务暂不可用：")
+            ):
+                st.warning(ai_result)
+            else:
+                st.markdown(ai_result)
+    else:
+        st.info("当前条件下暂无符合要求的长线投资标的。")
+
+    if result.get("errors"):
+        with st.expander("⚠️ 筛选异常记录", expanded=False):
+            for err in result.get("errors", [])[:50]:
+                st.write(f"- {err}")
+
+
+def display_self_healing_tab():
+    """显示 AI 自愈 / 复测记录"""
+    st.markdown("### 🧠 AI自愈")
+    st.caption("记录寻龙记推荐批次，按 3 个交易日收益复测，维护来源权重与个股冷却。")
+
+    service = XunlongSelfHealingService()
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("🔄 刷新自愈数据", key="refresh_self_healing"):
+            st.rerun()
+    with col2:
+        if st.button("▶ 立即执行复测", key="run_self_healing_review"):
+            with st.spinner("正在执行寻龙记复测..."):
+                review_result = service.review_due_feedback()
+            if review_result.get("success"):
+                st.success(review_result.get("message", "复测完成"))
+            else:
+                st.error(review_result.get("message", "复测失败"))
+            st.rerun()
+
+    dashboard = service.get_dashboard_data(limit=100)
+    stats_df = dashboard.get("stats")
+    records_df = dashboard.get("records")
+    weights = dashboard.get("weights", {})
+
+    if stats_df is not None and not stats_df.empty:
+        st.markdown("#### 📊 来源表现统计")
+        view_df = stats_df.copy()
+        if "avg_return_pct" in view_df.columns:
+            view_df["avg_return_pct"] = pd.to_numeric(view_df["avg_return_pct"], errors="coerce").round(2)
+        st.dataframe(view_df, use_container_width=True, hide_index=True)
+        with st.expander("⚙️ 当前来源权重", expanded=False):
+            for source, weight in weights.items():
+                st.write(f"- {source}: {weight}")
+    else:
+        st.info("暂无来源统计数据。")
+
+    if records_df is not None and not records_df.empty:
+        st.markdown("#### 📝 复测记录")
+        view_records = records_df.copy()
+        if "return_pct" in view_records.columns:
+            view_records["return_pct"] = pd.to_numeric(view_records["return_pct"], errors="coerce").round(2)
+        preferred_cols = [
+            "batch_time", "data_source", "stock_code", "source_tag", "recommended_date",
+            "recommended_price", "review_due_date", "review_price", "return_pct",
+            "feedback_status", "stock_cooldown", "notes",
+        ]
+        shown_cols = [col for col in preferred_cols if col in view_records.columns]
+        st.dataframe(view_records[shown_cols], use_container_width=True, hide_index=True)
+    else:
+        st.info("暂无寻龙记复测记录。")
 
 
 def display_history_tab():
@@ -662,7 +891,13 @@ def display_agents_reports(agents_analysis):
             st.markdown("---")
             
             st.markdown("### 📄 分析报告")
-            st.write(agent.get("analysis", "暂无分析"))
+            analysis_text = agent.get("analysis", "暂无分析")
+            if isinstance(analysis_text, str) and (
+                analysis_text.startswith("API调用失败:") or analysis_text.startswith("AI服务暂不可用：")
+            ):
+                st.warning(analysis_text)
+            else:
+                st.write(analysis_text)
 
 
 def display_comprehensive_report(report):
@@ -779,7 +1014,7 @@ def display_pdf_export_section(result):
         st.write("将分析报告导出为PDF或Markdown文件，方便保存和分享")
     
     with col2:
-        if st.button("📥 生成PDF报告", type="primary", width='content'):
+        if st.button("📥 生成PDF报告", type="primary"):
             with st.spinner("正在生成PDF报告..."):
                 try:
                     # 生成PDF
@@ -801,7 +1036,7 @@ def display_pdf_export_section(result):
                     st.error(f"❌ PDF生成失败: {str(e)}")
     
     with col3:
-        if st.button("📝 生成Markdown", type="secondary", width='content'):
+        if st.button("📝 生成Markdown", type="secondary"):
             with st.spinner("正在生成Markdown报告..."):
                 try:
                     # 生成Markdown内容
@@ -820,12 +1055,11 @@ def display_pdf_export_section(result):
     with col4:
         # 如果已经生成了PDF，显示下载按钮
         if 'sector_pdf_data' in st.session_state:
-            st.download_button(
+                    st.download_button(
                         label="💾 下载PDF",
                         data=st.session_state.sector_pdf_data,
                         file_name=st.session_state.sector_pdf_filename,
-                        mime="application/pdf",
-                        width='content'
+                        mime="application/pdf"
                     )
         
         # 如果已经生成了Markdown，显示下载按钮
@@ -834,8 +1068,7 @@ def display_pdf_export_section(result):
                         label="💾 下载Markdown",
                         data=st.session_state.sector_markdown_data,
                         file_name=st.session_state.sector_markdown_filename,
-                        mime="text/markdown",
-                        width='content'
+                        mime="text/markdown"
                     )
 
 
@@ -1065,7 +1298,7 @@ def display_scheduler_settings():
             
             with col_a:
                 if not status['running']:
-                    if st.button("▶️ 启动", width='content', type="primary"):
+                    if st.button("▶️ 启动", type="primary"):
                         if sector_strategy_scheduler.start(schedule_time_str):
                             st.success(f"✅ 定时任务已启动！每天 {schedule_time_str} 运行")
                             time.sleep(1)
@@ -1073,7 +1306,7 @@ def display_scheduler_settings():
                         else:
                             st.error("❌ 启动失败")
                 else:
-                    if st.button("⏹️ 停止", width='content'):
+                    if st.button("⏹️ 停止"):
                         if sector_strategy_scheduler.stop():
                             st.success("✅ 定时任务已停止")
                             time.sleep(1)
@@ -1082,13 +1315,13 @@ def display_scheduler_settings():
                             st.error("❌ 停止失败")
             
             with col_b:
-                if st.button("🔄 立即运行", width='content'):
+                if st.button("🔄 立即运行"):
                     with st.spinner("正在运行分析..."):
                         sector_strategy_scheduler.manual_run()
                     st.success("✅ 手动分析完成！")
             
             with col_c:
-                if st.button("📧 测试邮件", width='content'):
+                if st.button("📧 测试邮件"):
                     test_email_notification()
         
         # 邮件配置检查
@@ -1153,4 +1386,3 @@ def test_email_notification():
 # 主入口
 if __name__ == "__main__":
     display_sector_strategy()
-

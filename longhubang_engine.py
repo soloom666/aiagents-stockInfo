@@ -9,6 +9,7 @@ from longhubang_agents import LonghubangAgents
 from longhubang_scoring import LonghubangScoring
 from typing import Dict, Any, List
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import logging
 from common.extractText import split_text, extract_stock_codes
@@ -115,35 +116,41 @@ class LonghubangEngine:
                 scoring_ranking_data = []
             results["scoring_ranking"] = scoring_ranking_data
             
-            # 阶段4: AI分析师团队分析
-            self.logger.info("[阶段4] AI分析师团队工作中...")
+            # 阶段4: AI分析师团队分析（前4位并行）
+            self.logger.info("[阶段4] AI分析师团队工作中（并行）...")
             self.logger.info("-" * 60)
-            
+
             agents_results = {}
-            
-            # 1. 游资行为分析师
-            self.logger.info("1/5 游资行为分析师...")
-            youzi_result = self.agents.youzi_behavior_analyst(formatted_data, summary)
-            agents_results["youzi"] = youzi_result
-            
-            # 2. 个股潜力分析师
-            self.logger.info("2/5 个股潜力分析师...")
-            stock_result = self.agents.stock_potential_analyst(formatted_data, summary)
-            agents_results["stock"] = stock_result
-            
-            # 3. 题材追踪分析师
-            self.logger.info("3/5 题材追踪分析师...")
-            theme_result = self.agents.theme_tracker_analyst(formatted_data, summary)
-            agents_results["theme"] = theme_result
-            
-            # 4. 风险控制专家
-            self.logger.info("4/5 风险控制专家...")
-            risk_result = self.agents.risk_control_specialist(formatted_data, summary)
-            agents_results["risk"] = risk_result
-            
-            # 5. 首席策略师综合
+
+            analyst_tasks = {
+                "youzi": (self.agents.youzi_behavior_analyst, (formatted_data, summary)),
+                "stock": (self.agents.stock_potential_analyst, (formatted_data, summary)),
+                "theme": (self.agents.theme_tracker_analyst, (formatted_data, summary)),
+                "risk":  (self.agents.risk_control_specialist, (formatted_data, summary)),
+            }
+            self.logger.info("1-4/5 游资/个股/题材/风险分析师并行运行...")
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                future_to_key = {
+                    executor.submit(fn, *args): key
+                    for key, (fn, args) in analyst_tasks.items()
+                }
+                for future in as_completed(future_to_key):
+                    key = future_to_key[future]
+                    try:
+                        agents_results[key] = future.result()
+                        self.logger.info(f"  ✓ {key} 分析师完成")
+                    except Exception as exc:
+                        self.logger.error(f"  ✗ {key} 分析师失败: {exc}")
+                        agents_results[key] = {"analysis": f"分析失败: {exc}"}
+
+            # 5. 首席策略师综合（依赖前4位结果，串行）
             self.logger.info("5/5 首席策略师综合分析...")
-            all_analyses = [youzi_result, stock_result, theme_result, risk_result]
+            all_analyses = [
+                agents_results.get("youzi", {}),
+                agents_results.get("stock", {}),
+                agents_results.get("theme", {}),
+                agents_results.get("risk", {}),
+            ]
             chief_result = self.agents.chief_strategist(all_analyses)
             agents_results["chief"] = chief_result
             results["agents_analysis"] = agents_results
@@ -152,8 +159,8 @@ class LonghubangEngine:
             #  智瞰龙虎榜-提取推荐股票: 高风险警示股上段推荐股
             longhuban_recommended_stocks = extract_stock_codes(split_text(chief_result['analysis'], split_char='高风险警示股', line_up=True))
             print(f"智瞰龙虎-AI推荐分析师报告-次日重点推荐股票 longhuban_recommended_stocks: {longhuban_recommended_stocks}")
-            ReadFile.replase_json_data('E:\\project\\Python project\\platform\\aitrader\\data\\output\\json\\al_agent_stock_program.json',
-                longhuban_recommended_stocks)
+            longhuban_stocks = {"longhuban_stocks": longhuban_recommended_stocks}
+            ReadFile.replase_json_data('/aitrader/data/output/json/al_agent_stock_program.json', longhuban_stocks)
 
 
             # 阶段5: 提取推荐股票
@@ -161,7 +168,7 @@ class LonghubangEngine:
             self.logger.info("-" * 60)
             recommended_stocks = self._extract_recommended_stocks(
                 chief_result.get('analysis', ''),
-                stock_result.get('analysis', ''),
+                agents_results.get('stock', {}).get('analysis', ''),
                 summary
             )
             results["recommended_stocks"] = recommended_stocks
@@ -396,4 +403,3 @@ if __name__ == "__main__":
         print(f"推荐股票: {len(results['recommended_stocks'])}")
     else:
         print(f"\n分析失败: {results.get('error', '未知错误')}")
-

@@ -145,7 +145,7 @@ def display_add_stock_section():
                 auto_take_profit = st.checkbox("自动止盈", value=True)
         
         # 添加按钮
-        if st.button("✅ 添加监测", type="primary", width='stretch'):
+        if st.button("✅ 添加监测", type="primary", use_container_width=True):
             if symbol and entry_min > 0 and entry_max > 0 and entry_max > entry_min:
                 try:
                     # 准备数据
@@ -408,10 +408,10 @@ def display_edit_dialog(stock_id: int):
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            submit = st.form_submit_button("✅ 保存修改", type="primary", width='stretch')
-        
+            submit = st.form_submit_button("✅ 保存修改", type="primary", use_container_width=True)
+
         with col2:
-            cancel = st.form_submit_button("❌ 取消", width='stretch')
+            cancel = st.form_submit_button("❌ 取消", use_container_width=True)
         
         if submit:
             if entry_min > 0 and entry_max > 0 and entry_max > entry_min:
@@ -482,7 +482,7 @@ def display_delete_confirm_dialog(stock_id: int):
     col1, col2, col3 = st.columns([1, 1, 1])
     
     with col1:
-        if st.button("🗑️ 确认删除", type="primary", width='stretch', key=f"confirm_delete_{stock_id}"):
+        if st.button("🗑️ 确认删除", type="primary", use_container_width=True, key=f"confirm_delete_{stock_id}"):
             try:
                 result = monitor_db.remove_monitored_stock(stock_id)
                 if result:
@@ -508,7 +508,7 @@ def display_delete_confirm_dialog(stock_id: int):
                 st.rerun()
     
     with col2:
-        if st.button("❌ 取消", width='stretch', key=f"cancel_delete_{stock_id}"):
+        if st.button("❌ 取消", use_container_width=True, key=f"cancel_delete_{stock_id}"):
             del st.session_state.deleting_stock_id
             st.rerun()
 
@@ -568,7 +568,7 @@ def display_notification_management():
         
         # 测试邮件按钮
         if email_config['configured']:
-            if st.button("📧 发送测试邮件", type="primary", width='stretch'):
+            if st.button("📧 发送测试邮件", type="primary", use_container_width=True):
                 with st.spinner("正在发送测试邮件..."):
                     success, message = notification_service.send_test_email()
                     if success:
@@ -577,7 +577,7 @@ def display_notification_management():
                     else:
                         st.error(f"❌ {message}")
         else:
-            st.button("📧 发送测试邮件", type="primary", width='stretch', disabled=True)
+            st.button("📧 发送测试邮件", type="primary", use_container_width=True, disabled=True)
             st.caption("请先在.env文件中配置邮件参数")
     
     with col2:
@@ -688,7 +688,7 @@ def display_miniqmt_status():
         
         # 连接按钮
         if qmt_status['enabled'] and not qmt_status['connected']:
-            if st.button("🔗 连接MiniQMT", type="primary", width='stretch'):
+            if st.button("🔗 连接MiniQMT", type="primary", use_container_width=True):
                 success, msg = miniqmt.connect()
                 if success:
                     st.success(f"✅ {msg}")
@@ -696,7 +696,7 @@ def display_miniqmt_status():
                     st.error(f"❌ {msg}")
                 st.rerun()
         elif qmt_status['connected']:
-            if st.button("🔌 断开连接", width='stretch'):
+            if st.button("🔌 断开连接", use_container_width=True):
                 if miniqmt.disconnect():
                     st.info("⏸️ 已断开MiniQMT连接")
                     st.rerun()
@@ -820,7 +820,7 @@ def display_scheduler_section():
         col1, col2, col3 = st.columns([1, 1, 1])
         
         with col1:
-            if st.button("💾 保存设置", type="primary", width='stretch'):
+            if st.button("💾 保存设置", type="primary", use_container_width=True):
                 try:
                     # 更新配置
                     scheduler.update_config(
@@ -841,24 +841,24 @@ def display_scheduler_section():
         
         with col2:
             if status['scheduler_running']:
-                if st.button("⏹️ 停止调度器", width='stretch'):
+                if st.button("⏹️ 停止调度器", use_container_width=True):
                     scheduler.stop_scheduler()
                     st.info("⏸️ 调度器已停止")
                     time.sleep(0.5)
                     st.rerun()
             else:
                 if enabled:
-                    if st.button("▶️ 启动调度器", type="secondary", width='stretch'):
+                    if st.button("▶️ 启动调度器", type="secondary", use_container_width=True):
                         scheduler.start_scheduler()
                         st.success("✅ 调度器已启动")
                         time.sleep(0.5)
                         st.rerun()
                 else:
-                    st.button("▶️ 启动调度器", width='stretch', disabled=True)
+                    st.button("▶️ 启动调度器", use_container_width=True, disabled=True)
                     st.caption("请先启用定时调度")
         
         with col3:
-            if st.button("🔄 刷新状态", width='stretch'):
+            if st.button("🔄 刷新状态", use_container_width=True):
                 st.rerun()
 
 def get_monitor_summary():

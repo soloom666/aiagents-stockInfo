@@ -92,7 +92,7 @@ class LonghubangDataFetcher:
 
     def _get_akshare_longhubang_data(self, date):
         """
-        通过 akshare（东方财富）获取指定日期的龙虎榜数据
+        通过 akshare（东方财富）获取指定日期的龙虎榜数据，内部多函数降级
 
         Args:
             date: 日期，格式为 YYYY-MM-DD
@@ -100,35 +100,91 @@ class LonghubangDataFetcher:
         Returns:
             dict: 与主数据源格式一致的龙虎榜数据，失败返回 None
         """
-        try:
-            import akshare as ak
-            # akshare 日期格式为 YYYYMMDD
-            date_ak = date.replace('-', '')
-            print(f"    [akshare] 请求东方财富龙虎榜数据，日期: {date_ak}")
-            df = ak.stock_lhb_detail_em(date=date_ak)
-            if df is None or df.empty:
-                print(f"    [akshare] 未获取到 {date} 的数据")
-                return None
+        import akshare as ak
+        date_ak = date.replace('-', '')
+        print(f"    [akshare] 请求东方财富龙虎榜数据，日期: {date_ak}")
 
-            records = []
-            for _, row in df.iterrows():
-                records.append({
-                    'gpdm': str(row.get('代码', '')),
-                    'gpmc': str(row.get('名称', '')),
-                    'mrje': row.get('买入额', 0),
-                    'mcje': row.get('卖出额', 0),
-                    'jlrje': row.get('净额', 0),
-                    'yyb': str(row.get('买入营业部名称', '')),
-                    'yzmc': str(row.get('买入营业部名称', '')),
-                    'sblx': str(row.get('上榜原因', '')),
-                    'rq': date,
-                    'gl': '',
-                })
-            print(f"    [akshare] ✓ 成功获取 {len(records)} 条龙虎榜记录")
-            return {'data': records}
-        except Exception as e:
-            print(f"    [akshare] 获取数据失败: {e}")
+        # ── 尝试方法1：stock_lhb_detail_em(start_date, end_date) ──
+        df = self._try_lhb_detail_em(ak, date_ak)
+
+        # ── 尝试方法2：stock_lhb_stock_statistic_em ──
+        if df is None:
+            df = self._try_lhb_stock_statistic_em(ak, date_ak)
+
+        if df is None or df.empty:
+            print(f"    [akshare] 所有方法均未获取到 {date} 的数据")
             return None
+
+        records = self._normalize_lhb_df(df, date)
+        print(f"    [akshare] ✓ 成功获取 {len(records)} 条龙虎榜记录")
+        return {'data': records}
+
+    def _try_lhb_detail_em(self, ak, date_ak):
+        """尝试 stock_lhb_detail_em，兼容新旧参数"""
+        # 新版参数：start_date / end_date
+        for kwargs in [
+            {'start_date': date_ak, 'end_date': date_ak},
+            {'date': date_ak},
+        ]:
+            try:
+                df = ak.stock_lhb_detail_em(**kwargs)
+                if df is not None and not df.empty:
+                    print(f"    [akshare] stock_lhb_detail_em{list(kwargs.keys())} 成功")
+                    return df
+            except TypeError:
+                continue
+            except Exception as e:
+                print(f"    [akshare] stock_lhb_detail_em 异常: {e}")
+                return None
+        return None
+
+    def _try_lhb_stock_statistic_em(self, ak, date_ak):
+        """尝试 stock_lhb_stock_statistic_em 或同类备用函数"""
+        candidates = [
+            ('stock_lhb_stock_statistic_em', {'start_date': date_ak, 'end_date': date_ak}),
+            ('stock_lhb_jgmmtj_em',          {'start_date': date_ak, 'end_date': date_ak}),
+        ]
+        for func_name, kwargs in candidates:
+            func = getattr(ak, func_name, None)
+            if func is None:
+                continue
+            try:
+                df = func(**kwargs)
+                if df is not None and not df.empty:
+                    print(f"    [akshare] {func_name} 成功")
+                    return df
+            except Exception as e:
+                print(f"    [akshare] {func_name} 异常: {e}")
+        return None
+
+    def _normalize_lhb_df(self, df, date):
+        """将 akshare 返回的 DataFrame 统一转换为内部记录格式"""
+        # 各版本可能的列名映射（取第一个命中的）
+        col = lambda *names: next((n for n in names if n in df.columns), None)
+
+        code_col   = col('代码', '股票代码')
+        name_col   = col('名称', '股票名称')
+        buy_col    = col('买入额', '买入金额', '买方金额')
+        sell_col   = col('卖出额', '卖出金额', '卖方金额')
+        net_col    = col('净额', '净流入', '净买入额')
+        yyb_col    = col('买入营业部名称', '营业部名称', '机构名称')
+        reason_col = col('上榜原因', '上榜类型', '解读')
+
+        records = []
+        for _, row in df.iterrows():
+            records.append({
+                'gpdm': str(row[code_col])      if code_col   else '',
+                'gpmc': str(row[name_col])      if name_col   else '',
+                'mrje': float(row[buy_col])     if buy_col    else 0.0,
+                'mcje': float(row[sell_col])    if sell_col   else 0.0,
+                'jlrje': float(row[net_col])    if net_col    else 0.0,
+                'yyb':  str(row[yyb_col])       if yyb_col    else '',
+                'yzmc': str(row[yyb_col])       if yyb_col    else '',
+                'sblx': str(row[reason_col])    if reason_col else '',
+                'rq':   date,
+                'gl':   '',
+            })
+        return records
     
     def get_longhubang_data_range(self, start_date, end_date):
         """

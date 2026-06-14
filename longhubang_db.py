@@ -7,7 +7,20 @@ import sqlite3
 from datetime import datetime
 import json
 import pandas as pd
+import numpy as np
 import logging
+
+
+class _NumpyEncoder(json.JSONEncoder):
+    """将 numpy 数值类型转换为 Python 原生类型，解决 JSON 序列化问题"""
+    def default(self, obj):
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
 
 
 class LonghubangDatabase:
@@ -307,17 +320,17 @@ class LonghubangDatabase:
         
         # 如果传入的是字典，转换为JSON字符串
         if isinstance(analysis_content, dict):
-            analysis_content = json.dumps(analysis_content, ensure_ascii=False, indent=2)
-        
+            analysis_content = json.dumps(analysis_content, ensure_ascii=False, indent=2, cls=_NumpyEncoder)
+
         cursor.execute('''
-        INSERT INTO longhubang_analysis 
+        INSERT INTO longhubang_analysis
         (analysis_date, data_date_range, analysis_content, recommended_stocks, summary)
         VALUES (?, ?, ?, ?, ?)
         ''', (
             datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             data_date_range,
             analysis_content,
-            json.dumps(recommended_stocks, ensure_ascii=False),
+            json.dumps(recommended_stocks, ensure_ascii=False, cls=_NumpyEncoder),
             summary
         ))
         

@@ -4,7 +4,34 @@
 
 ### 安装依赖
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
+```
+
+### Python版本
+- 推荐 `Python 3.12.x`
+- 主应用只需要 `requirements.txt`
+- 如果要使用量化扩展或“寻龙记”，再执行：
+
+```bash
+python -m pip install -r requirements-quant.txt
+```
+
+### Windows 虚拟环境推荐方式
+```powershell
+.\setup_windows.ps1
+```
+
+如果升级 `pip` 时出现：
+
+```text
+ERROR: To modify pip, please run the following command:
+...\python.exe -m pip install --upgrade pip
+```
+
+请使用虚拟环境里的 Python：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
 ```
 
 ### 配置API密钥
@@ -134,4 +161,3 @@ EMAIL_TO=receiver@example.com
 ---
 
 **祝您使用愉快！📈**
-

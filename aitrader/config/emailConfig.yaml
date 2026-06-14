@@ -1,0 +1,60 @@
+emailService:
+#- name: # 配置hotmail邮箱服务器
+  hotmailCofig: {
+    MAIL_SERVER: "smtp.live.com",
+    MAIL_PROT: 25,
+    MAIL_USE_TLS: True,
+    MAIL_USE_SSL: False,
+    MAIL_USERNAME: "",
+    MAIL_PASSWORD: "",
+    MAIL_DEBUG: True
+  }
+
+
+#- name: 配置qq邮箱服务器：
+  qqMailCofig: {
+    MAIL_SERVER: 'smtp.qq.com',
+    MAIL_PROT: 587,
+    MAIL_USE_TLS: True,
+    MAIL_USE_SSL: False,
+    MAIL_USERNAME: "317761798@qq.com",
+    MAIL_PASSWORD: "",
+    MAIL_DEBUG: True
+  }
+
+#- name: 配置126邮箱服务器：
+  oTsMailCofig: {
+    MAIL_SERVER: 'smtp.126.com',
+    MAIL_PROT: 25,
+    MAIL_USE_TLS: True,
+    MAIL_USE_SSL: False,
+    MAIL_USERNAME: "",
+    MAIL_PASSWORD: "",
+    MAIL_DEBUG: True
+  }
+
+#- name: 配置163邮箱服务器：
+  oStMailCofig: {
+    MAIL_SERVER: 'smtp.163.com',
+    MAIL_PROT: 465,
+    MAIL_USE_TLS: True,
+    MAIL_USE_SSL: False,
+    MAIL_USERNAME: "17521672466@163.com",
+    MAIL_PASSWORD: "WYKTWUVGMDAGMPZH",
+    MAIL_DEBUG: True
+  }
+
+#MySQL配置
+MYSQL_Cofig: {
+    HOST: '101.132.156.38',
+    PROT: 3306,
+    USER: "root",
+    PASSWORD: qsxzse66,
+    DB: "getenterprise",
+  }
+
+
+
+reportPath: "reports"
+#receiver: ["bixiaolan@sinochem.com", "yekai01@sinochem.com", "v-luojin5@sinochem.com", "haokecun@sinochem.com", "v-luchao3@sinochem.com", "v-heqing3@sinochem.com"]
+receiver: "17521672466@163.com"

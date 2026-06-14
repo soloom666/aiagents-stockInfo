@@ -1,17 +1,105 @@
 <component name="InspectionProjectProfileManager">
   <profile version="1.0">
     <option name="myName" value="Project Default" />
-    <inspection_tool class="PyPackageRequirementsInspection" enabled="false" level="WARNING" enabled_by_default="false">
+    <inspection_tool class="LanguageDetectionInspection" enabled="false" level="WEAK WARNING" enabled_by_default="false" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
       <option name="ignoredPackages">
         <value>
-          <list size="4">
-            <item index="0" class="java.lang.String" itemvalue="vnpy_ctp" />
-            <item index="1" class="java.lang.String" itemvalue="rqalpha" />
-            <item index="2" class="java.lang.String" itemvalue="allure-pytest" />
-            <item index="3" class="java.lang.String" itemvalue="pytest" />
+          <list size="83">
+            <item index="0" class="java.lang.String" itemvalue="Flask-CORS" />
+            <item index="1" class="java.lang.String" itemvalue="langchain_anthropic" />
+            <item index="2" class="java.lang.String" itemvalue="PyYAML" />
+            <item index="3" class="java.lang.String" itemvalue="python-dateutil" />
+            <item index="4" class="java.lang.String" itemvalue="python-dotenv" />
+            <item index="5" class="java.lang.String" itemvalue="marshmallow" />
+            <item index="6" class="java.lang.String" itemvalue="redis" />
+            <item index="7" class="java.lang.String" itemvalue="playwright" />
+            <item index="8" class="java.lang.String" itemvalue="langchain" />
+            <item index="9" class="java.lang.String" itemvalue="maincontentextractor" />
+            <item index="10" class="java.lang.String" itemvalue="anyio" />
+            <item index="11" class="java.lang.String" itemvalue="anthropic" />
+            <item index="12" class="java.lang.String" itemvalue="uvicorn" />
+            <item index="13" class="java.lang.String" itemvalue="PyPDF2" />
+            <item index="14" class="java.lang.String" itemvalue="passlib" />
+            <item index="15" class="java.lang.String" itemvalue="pydantic" />
+            <item index="16" class="java.lang.String" itemvalue="dbutils" />
+            <item index="17" class="java.lang.String" itemvalue="cryptography" />
+            <item index="18" class="java.lang.String" itemvalue="gunicorn" />
+            <item index="19" class="java.lang.String" itemvalue="langchain_aws" />
+            <item index="20" class="java.lang.String" itemvalue="Flask-SQLAlchemy" />
+            <item index="21" class="java.lang.String" itemvalue="click" />
+            <item index="22" class="java.lang.String" itemvalue="bcrypt" />
+            <item index="23" class="java.lang.String" itemvalue="autogen_ext" />
+            <item index="24" class="java.lang.String" itemvalue="openai" />
+            <item index="25" class="java.lang.String" itemvalue="langchain_ibm" />
+            <item index="26" class="java.lang.String" itemvalue="matplotlib" />
+            <item index="27" class="java.lang.String" itemvalue="typing" />
+            <item index="28" class="java.lang.String" itemvalue="allure-python-commons" />
+            <item index="29" class="java.lang.String" itemvalue="langchain_openai" />
+            <item index="30" class="java.lang.String" itemvalue="autogen" />
+            <item index="31" class="java.lang.String" itemvalue="PyMySQL" />
+            <item index="32" class="java.lang.String" itemvalue="PyJWT" />
+            <item index="33" class="java.lang.String" itemvalue="gradio" />
+            <item index="34" class="java.lang.String" itemvalue="alembic" />
+            <item index="35" class="java.lang.String" itemvalue="autogen_agentchat" />
+            <item index="36" class="java.lang.String" itemvalue="requests" />
+            <item index="37" class="java.lang.String" itemvalue="numpy" />
+            <item index="38" class="java.lang.String" itemvalue="flake8" />
+            <item index="39" class="java.lang.String" itemvalue="Flask-Login" />
+            <item index="40" class="java.lang.String" itemvalue="pyscreenshot" />
+            <item index="41" class="java.lang.String" itemvalue="celery" />
+            <item index="42" class="java.lang.String" itemvalue="pymysql" />
+            <item index="43" class="java.lang.String" itemvalue="selenium" />
+            <item index="44" class="java.lang.String" itemvalue="pytest-cov" />
+            <item index="45" class="java.lang.String" itemvalue="tenacity" />
+            <item index="46" class="java.lang.String" itemvalue="markdown" />
+            <item index="47" class="java.lang.String" itemvalue="browser-use" />
+            <item index="48" class="java.lang.String" itemvalue="Flask-JWT-Extended" />
+            <item index="49" class="java.lang.String" itemvalue="pyautogui" />
+            <item index="50" class="java.lang.String" itemvalue="langchain_mistralai" />
+            <item index="51" class="java.lang.String" itemvalue="Flask" />
+            <item index="52" class="java.lang.String" itemvalue="langgraph" />
+            <item index="53" class="java.lang.String" itemvalue="python-docx" />
+            <item index="54" class="java.lang.String" itemvalue="langchain_mcp_adapters" />
+            <item index="55" class="java.lang.String" itemvalue="pytest" />
+            <item index="56" class="java.lang.String" itemvalue="aiofiles" />
+            <item index="57" class="java.lang.String" itemvalue="black" />
+            <item index="58" class="java.lang.String" itemvalue="allure-pytest" />
+            <item index="59" class="java.lang.String" itemvalue="python-multipart" />
+            <item index="60" class="java.lang.String" itemvalue="pytest-asyncio" />
+            <item index="61" class="java.lang.String" itemvalue="pandas" />
+            <item index="62" class="java.lang.String" itemvalue="fastapi" />
+            <item index="63" class="java.lang.String" itemvalue="asyncio" />
+            <item index="64" class="java.lang.String" itemvalue="Flask-Migrate" />
+            <item index="65" class="java.lang.String" itemvalue="langchain-core" />
+            <item index="66" class="java.lang.String" itemvalue="pillow" />
+            <item index="67" class="java.lang.String" itemvalue="webdriver_manager" />
+            <item index="68" class="java.lang.String" itemvalue="isort" />
+            <item index="69" class="java.lang.String" itemvalue="langchain_google_genai" />
+            <item index="70" class="java.lang.String" itemvalue="openpyxl" />
+            <item index="71" class="java.lang.String" itemvalue="tushare" />
+            <item index="72" class="java.lang.String" itemvalue="baostock" />
+            <item index="73" class="java.lang.String" itemvalue="yfinance" />
+            <item index="74" class="java.lang.String" itemvalue="streamlit" />
+            <item index="75" class="java.lang.String" itemvalue="reportlab" />
+            <item index="76" class="java.lang.String" itemvalue="plotly" />
+            <item index="77" class="java.lang.String" itemvalue="mcp" />
+            <item index="78" class="java.lang.String" itemvalue="akshare" />
+            <item index="79" class="java.lang.String" itemvalue="ta" />
+            <item index="80" class="java.lang.String" itemvalue="pywencai" />
+            <item index="81" class="java.lang.String" itemvalue="pytest-html" />
+            <item index="82" class="java.lang.String" itemvalue="dingtalk-stream" />
           </list>
         </value>
       </option>
     </inspection_tool>
+    <inspection_tool class="PyStubPackagesAdvertiser" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <list>
+          <option value="pandas" />
+        </list>
+      </option>
+    </inspection_tool>
+    <inspection_tool class="ReassignedToPlainText" enabled="false" level="WARNING" enabled_by_default="false" />
   </profile>
 </component>

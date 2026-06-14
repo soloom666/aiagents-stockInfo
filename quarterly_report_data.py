@@ -12,6 +12,15 @@ import akshare as ak
 
 warnings.filterwarnings('ignore')
 
+
+def _safe_print(message):
+    """Windows 控制台兼容输出，避免 GBK 环境下 UnicodeEncodeError。"""
+    try:
+        print(message)
+    except UnicodeEncodeError:
+        fallback = str(message).encode("gbk", errors="ignore").decode("gbk", errors="ignore")
+        print(fallback)
+
 # 设置标准输出编码为UTF-8（仅在命令行环境，避免streamlit冲突）
 def _setup_stdout_encoding():
     """仅在命令行环境设置标准输出编码"""
@@ -37,18 +46,25 @@ class QuarterlyReportDataFetcher:
     def __init__(self):
         self.periods = 8  # 获取最近8期季报
         self.available = True
-        print("✓ 季报数据获取器初始化成功（akshare数据源）")
+        self._cache = {}
+        _safe_print("季报数据获取器初始化成功（akshare数据源）")
     
-    def get_quarterly_reports(self, symbol):
+    def get_quarterly_reports(self, symbol, include_balance_sheet=True, include_cash_flow=True, verbose=True):
         """
         获取股票的季报数据
         
         Args:
             symbol: 股票代码（6位数字）
+            include_balance_sheet: 是否获取资产负债表
+            include_cash_flow: 是否获取现金流量表
             
         Returns:
             dict: 包含季报数据的字典
         """
+        cache_key = (symbol, bool(include_balance_sheet), bool(include_cash_flow))
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+
         data = {
             "symbol": symbol,
             "income_statement": None,      # 利润表
@@ -65,43 +81,56 @@ class QuarterlyReportDataFetcher:
             return data
         
         try:
-            print(f"📊 正在获取 {symbol} 的季报数据...")
+            if verbose:
+                _safe_print(f"正在获取 {symbol} 的季报数据...")
             
             # 获取利润表
+            balance_data = None
+            cash_flow_data = None
             income_data = self._get_income_statement(symbol)
             if income_data:
                 data["income_statement"] = income_data
-                print(f"   ✓ 成功获取 {len(income_data.get('data', []))} 期利润表数据")
+                if verbose:
+                    _safe_print(f"成功获取 {len(income_data.get('data', []))} 期利润表数据")
             
             # 获取资产负债表
-            balance_data = self._get_balance_sheet(symbol)
-            if balance_data:
-                data["balance_sheet"] = balance_data
-                print(f"   ✓ 成功获取 {len(balance_data.get('data', []))} 期资产负债表数据")
+            if include_balance_sheet:
+                balance_data = self._get_balance_sheet(symbol)
+                if balance_data:
+                    data["balance_sheet"] = balance_data
+                    if verbose:
+                        _safe_print(f"成功获取 {len(balance_data.get('data', []))} 期资产负债表数据")
             
             # 获取现金流量表
-            cash_flow_data = self._get_cash_flow(symbol)
-            if cash_flow_data:
-                data["cash_flow"] = cash_flow_data
-                print(f"   ✓ 成功获取 {len(cash_flow_data.get('data', []))} 期现金流量表数据")
+            if include_cash_flow:
+                cash_flow_data = self._get_cash_flow(symbol)
+                if cash_flow_data:
+                    data["cash_flow"] = cash_flow_data
+                    if verbose:
+                        _safe_print(f"成功获取 {len(cash_flow_data.get('data', []))} 期现金流量表数据")
             
             # 获取财务指标
             indicators_data = self._get_financial_indicators(symbol)
             if indicators_data:
                 data["financial_indicators"] = indicators_data
-                print(f"   ✓ 成功获取 {len(indicators_data.get('data', []))} 期财务指标数据")
+                if verbose:
+                    _safe_print(f"成功获取 {len(indicators_data.get('data', []))} 期财务指标数据")
             
             # 如果至少有一个成功，则标记为成功
             if income_data or balance_data or cash_flow_data or indicators_data:
                 data["data_success"] = True
-                print("✅ 季报数据获取完成")
+                if verbose:
+                    _safe_print("季报数据获取完成")
             else:
-                print("⚠️ 未能获取到季报数据")
+                if verbose:
+                    _safe_print("未能获取到季报数据")
                 
         except Exception as e:
-            print(f"❌ 获取季报数据失败: {e}")
+            if verbose:
+                _safe_print(f"获取季报数据失败: {e}")
             data["error"] = str(e)
         
+        self._cache[cache_key] = data
         return data
     
     def _is_chinese_stock(self, symbol):
@@ -115,7 +144,7 @@ class QuarterlyReportDataFetcher:
             df = ak.stock_financial_report_sina(stock=symbol, symbol="利润表")
             
             if df is None or df.empty:
-                print(f"   未找到利润表数据")
+                _safe_print("未找到利润表数据")
                 return None
             
             # 获取最近8期
@@ -144,7 +173,7 @@ class QuarterlyReportDataFetcher:
             }
             
         except Exception as e:
-            print(f"   获取利润表异常: {e}")
+            _safe_print(f"获取利润表异常: {e}")
             return None
     
     def _get_balance_sheet(self, symbol):
@@ -154,7 +183,7 @@ class QuarterlyReportDataFetcher:
             df = ak.stock_financial_report_sina(stock=symbol, symbol="资产负债表")
             
             if df is None or df.empty:
-                print(f"   未找到资产负债表数据")
+                _safe_print("未找到资产负债表数据")
                 return None
             
             # 获取最近8期
@@ -183,7 +212,7 @@ class QuarterlyReportDataFetcher:
             }
             
         except Exception as e:
-            print(f"   获取资产负债表异常: {e}")
+            _safe_print(f"获取资产负债表异常: {e}")
             return None
     
     def _get_cash_flow(self, symbol):
@@ -193,7 +222,7 @@ class QuarterlyReportDataFetcher:
             df = ak.stock_financial_report_sina(stock=symbol, symbol="现金流量表")
             
             if df is None or df.empty:
-                print(f"   未找到现金流量表数据")
+                _safe_print("未找到现金流量表数据")
                 return None
             
             # 获取最近8期
@@ -222,7 +251,7 @@ class QuarterlyReportDataFetcher:
             }
             
         except Exception as e:
-            print(f"   获取现金流量表异常: {e}")
+            _safe_print(f"获取现金流量表异常: {e}")
             return None
     
     def _get_financial_indicators(self, symbol):
@@ -232,7 +261,7 @@ class QuarterlyReportDataFetcher:
             df = ak.stock_financial_abstract(symbol=symbol)
             
             if df is None or df.empty:
-                print(f"   未找到财务指标数据")
+                _safe_print("未找到财务指标数据")
                 return None
             
             # 获取最近8期
@@ -249,7 +278,7 @@ class QuarterlyReportDataFetcher:
             indicator_rows = df[df['指标'].isin(key_indicators)]
             
             if indicator_rows.empty:
-                print(f"   未找到关键财务指标数据")
+                _safe_print("未找到关键财务指标数据")
                 return None
             
             # 获取日期列（排除'选项'和'指标'列）
@@ -280,7 +309,7 @@ class QuarterlyReportDataFetcher:
             }
             
         except Exception as e:
-            print(f"   获取财务指标异常: {e}")
+            _safe_print(f"获取财务指标异常: {e}")
             return None
     
     def format_quarterly_reports_for_ai(self, data):
@@ -423,4 +452,3 @@ if __name__ == "__main__":
             print(f"\n获取失败: {data.get('error', '未知错误')}")
         
         print("\n")
-

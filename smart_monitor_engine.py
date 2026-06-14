@@ -14,6 +14,7 @@ from smart_monitor_qmt import SmartMonitorQMT, SmartMonitorQMTSimulator
 from smart_monitor_db import SmartMonitorDB
 from notification_service import notification_service  # 复用主程序的通知服务
 from config_manager import config_manager  # 复用主程序的配置管理器
+from auth import get_runtime_llm_config
 
 
 class SmartMonitorEngine:
@@ -33,10 +34,11 @@ class SmartMonitorEngine:
         
         # 从配置管理器读取配置
         config = config_manager.read_env()
-        
+        user_llm_config = get_runtime_llm_config()
+
         # DeepSeek API
         if deepseek_api_key is None:
-            deepseek_api_key = config.get('DEEPSEEK_API_KEY', '')
+            deepseek_api_key = user_llm_config["api_key"]
         
         # MiniQMT配置
         if qmt_account_id is None:
@@ -48,7 +50,11 @@ class SmartMonitorEngine:
             use_simulator = not miniqmt_enabled
         
         # 初始化各个模块
-        self.deepseek = SmartMonitorDeepSeek(deepseek_api_key)
+        self.deepseek = SmartMonitorDeepSeek(
+            api_key=deepseek_api_key,
+            base_url=user_llm_config["base_url"],
+            model=user_llm_config["model"],
+        )
         self.data_fetcher = SmartMonitorDataFetcher()
         self.db = SmartMonitorDB()
         self.notification = notification_service  # 使用主程序的通知服务
@@ -630,4 +636,3 @@ if __name__ == '__main__':
         print(f"  理由: {result['decision']['reasoning'][:100]}...")
     else:
         print(f"\n分析失败: {result.get('error')}")
-

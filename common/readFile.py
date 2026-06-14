@@ -1,6 +1,7 @@
 import json
 import pandas as pd
 import os
+from datetime import datetime
 from common.logger import logger
 import yaml
 
@@ -10,6 +11,46 @@ BASE_PATH = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
 
 class ReadFile:
+
+    def _resolve_path(path_value, base_path=BASE_PATH):
+        """Resolve mixed Windows/Linux separators to a project-local absolute path."""
+        if path_value is None:
+            return os.path.normpath(base_path)
+
+        raw_path = str(path_value).strip()
+        if not raw_path:
+            return os.path.normpath(base_path)
+
+        normalized = raw_path.replace("\\", "/")
+        base_normalized = str(base_path).replace("\\", "/").rstrip("/")
+        candidate = os.path.normpath(normalized)
+
+        if normalized == base_normalized or normalized.startswith(base_normalized + "/"):
+            return candidate
+
+        is_windows_abs = len(normalized) >= 2 and normalized[1] == ":"
+        is_unc_path = normalized.startswith("//")
+        if is_windows_abs or is_unc_path:
+            return candidate
+
+        project_relative_roots = (
+            "/aitrader",
+            "/config",
+            "/data",
+            "/docs",
+            "/log",
+            "/common",
+        )
+        if normalized.startswith("/") and not normalized.startswith(project_relative_roots):
+            return candidate
+
+        if os.path.isabs(candidate) and os.path.exists(os.path.dirname(candidate)):
+            return candidate
+
+        if normalized.startswith("/"):
+            return os.path.normpath(os.path.join(base_path, normalized.lstrip("/")))
+
+        return os.path.normpath(os.path.join(base_path, normalized))
 
     def getProjectPath(self=None):
         # 获取项目路径
@@ -30,6 +71,7 @@ class ReadFile:
 
 
     def read_json(file_path_name=getProjectPath() + '/config/config.json'):
+        file_path_name = ReadFile._resolve_path(file_path_name, ReadFile.getProjectPath())
         with open(file_path_name, encoding='utf-8') as f:
             com = f.read()
         confJson = json.loads(com)
@@ -74,11 +116,11 @@ class ReadFile:
         return df
 
 
-    def read_stock_list_from_txt(filePath='\\data\\instruments\\A1股自选股.txt'):
+    def read_stock_list_from_txt(filePath='/data/instruments/A1股自选股.txt'):
         """
         读取txt文件中的股票代码列表
         """
-        full_path = BASE_PATH + filePath
+        full_path = ReadFile._resolve_path(filePath, BASE_PATH)
         if not os.path.exists(full_path):
             logger.error(f"文件不存在: {full_path}")
             return []
@@ -92,11 +134,13 @@ class ReadFile:
 
 
     def operJson(jsonFilePath, mode, data=None):
-        filePath = BASE_PATH + jsonFilePath
+        filePath = ReadFile._resolve_path(jsonFilePath, BASE_PATH)
         if mode == "w":
+            os.makedirs(os.path.dirname(filePath), exist_ok=True)
             with open(filePath, mode="w", encoding="utf-8") as f:
                 f.write(json.dumps(data, indent=4, ensure_ascii=False))  # 缩进4个空格 解决乱码
         elif mode == "a":
+            os.makedirs(os.path.dirname(filePath), exist_ok=True)
             with open(filePath, mode="a", encoding="utf-8") as f:
                 f.write(json.dumps(data, indent=4, ensure_ascii=False))
         elif mode == "r":
@@ -122,7 +166,7 @@ class ReadFile:
             df.to_excel(writer, sheet_name='Sheet1', index=False)
 
     def read_yamlAllPath(path_yaml_name):
-        data_file_path = ReadFile.getProjectPath() + path_yaml_name
+        data_file_path = ReadFile._resolve_path(path_yaml_name, ReadFile.getProjectPath())
         with open(data_file_path, mode='r', encoding='utf-8') as f:
             fr = f.read()
             data = yaml.load(fr, Loader=yaml.FullLoader)
@@ -143,7 +187,7 @@ class ReadFile:
         with pd.ExcelWriter(path=filePath, mode='a', if_sheet_exists='overlay') as writer:
                 df.to_excel(writer, sheet_name='Sheet1', index=False, header=False, startrow=writer.sheets['Sheet1'].max_row)
 
-    def get_AI_json_stocks(jsonFile= '\\aitrader\\data\\output\\json\\al_agent_stock_program.json'):
+    def get_AI_json_stocks(jsonFile= '/aitrader/data/output/json/al_agent_stock_program.json'):
         # 获取json文件所有stocks数据
         al_agent_stocks = ReadFile.operJson(jsonFile, 'r')
 
@@ -171,7 +215,7 @@ class ReadFile:
         print(f'合并并去重所有股票代码:{all_codes}')
         return all_codes, al_agent_stocks
 
-    def appendDatasToExcel(datas, filePath='\\aitrader\\data\\input\\myStock\\我的自选.xlsx', remove_duplicates=True):
+    def appendDatasToExcel(datas, filePath='/aitrader/data/input/myStock/我的自选.xlsx', remove_duplicates=True):
         """
         将数据追加到Excel文件的第一列，并去重
         Args:
@@ -179,7 +223,7 @@ class ReadFile:
             filePath (str): Excel文件路径
             remove_duplicates (bool): 是否去除重复项
         """
-        full_path = BASE_PATH + filePath
+        full_path = ReadFile._resolve_path(filePath, BASE_PATH)
 
         # 检查Excel文件是否存在
         if os.path.exists(full_path):
@@ -296,27 +340,33 @@ class ReadFile:
         :param json_data: 要替换的数据（dict），只更新其中包含的键
         :return:
         """
+        if not isinstance(json_data, dict):
+            logger.error(f"json_data 必须是 dict，当前类型: {type(json_data)}")
+            return
+
+        json_file_path = ReadFile._resolve_path(json_file_path, ReadFile.getProjectPath())
+        os.makedirs(os.path.dirname(json_file_path), exist_ok=True)
+
+        existing_data = {}
         try:
             with open(json_file_path, mode='r', encoding='utf-8') as f:
                 existing_data = json.load(f)
                 print(f"存在数据：{existing_data}")
         except (FileNotFoundError, json.JSONDecodeError) as e:
-            logger.error(f"读取JSON文件失败: {json_file_path}, 错误: {e}")
-            return
+            logger.warning(f"读取JSON文件失败，将创建新文件: {json_file_path}, 错误: {e}")
 
+        if not isinstance(existing_data, dict):
+            logger.warning(f"JSON文件内容不是对象结构，已重置: {json_file_path}")
+            existing_data = {}
 
-        if  'main_stocks' in json_data:
-            existing_data['main_stocks'] = json_data
-            with open(json_file_path, mode='w', encoding='utf-8') as f:
-                f.write(json.dumps(existing_data, indent=4, ensure_ascii=False))
-            print(f"main_stocks 已更新JSON文件：{existing_data}")
-        elif 'longhuban_stocks' in json_data:
-            existing_data['longhuban_stocks'] = json_data
-            with open(json_file_path, mode='w', encoding='utf-8') as f:
-                f.write(json.dumps(existing_data, indent=4, ensure_ascii=False))
-            print(f"longhuban_stocks 已更新JSON文件：{existing_data}")
-        else:
-            logger.error(f"JSON数据中不存在 'main_stocks' 或 'longhuban_stocks' 键")
+        existing_data.update(json_data)
+        existing_data['time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        with open(json_file_path, mode='w', encoding='utf-8') as f:
+            f.write(json.dumps(existing_data, indent=4, ensure_ascii=False))
+
+        print(f"JSON文件已更新：{json_file_path}")
+        print(f"更新后数据：{existing_data}")
 
 
 
@@ -325,12 +375,13 @@ class ReadFile:
 if __name__ == '__main__':
     # ReadFile.getFilePath_addProjectPath("/aitrader/datas/output/selfChooseStockResult/selfChooseStock.xlsx")
 
-    main_stocks = {'main_stocks': {
-	"fund_flow_analysis_codes": "000001",
-	"industry_analysis_codes": "000002",
-	"fundamental_analysis_codes": "000003"
+    longhuban_stocks = { "longhuban_stocks": [
+        "002566",
+        "600986"
+    ]
     }
-    }
+
+
+
     ReadFile.replase_json_data(
-        'E:\\project\\Python project\\platform\\aiagents-stockInfo\\aitrader\\data\\output\\json\\al_agent_stock_program.json',
-        main_stocks)
+        '/aitrader/data/output/json/al_agent_stock_program.json', longhuban_stocks)

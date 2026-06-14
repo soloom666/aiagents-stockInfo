@@ -271,7 +271,7 @@ def display_pdf_export_section(stock_info, agents_results, discussion_result, fi
         markdown_button_key = "generate_markdown_btn"
         
         # 生成PDF报告按钮
-        if st.button("📊 生成并下载报告(PDF/HTML)", type="primary", width='content', key=pdf_button_key):
+        if st.button("📊 生成并下载报告(PDF/HTML)", type="primary", key=pdf_button_key):
             st.session_state.show_download_links = True
             with st.spinner("正在生成报告..."):
                 success = generate_pdf_report(stock_info, agents_results, discussion_result, final_decision)
@@ -279,7 +279,7 @@ def display_pdf_export_section(stock_info, agents_results, discussion_result, fi
                     st.balloons()
         
         # 生成Markdown报告按钮
-        if st.button("📝 生成并下载Markdown报告", type="secondary", width='content', key=markdown_button_key):
+        if st.button("📝 生成并下载Markdown报告", type="secondary", key=markdown_button_key):
             with st.spinner("正在生成Markdown报告..."):
                 try:
                     # 生成Markdown内容

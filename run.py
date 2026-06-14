@@ -21,22 +21,18 @@ def check_requirements():
         return True
     except ImportError as e:
         print(f"❌ 缺少依赖包: {e}")
-        print("请运行: pip install -r requirements.txt")
+        print("请运行: python -m pip install -r requirements.txt")
         return False
 
 def check_config():
     """检查配置文件"""
     try:
-        import configs as config
-        if not config.DEEPSEEK_API_KEY:
-            print("⚠️  警告: DeepSeek API Key 未配置")
-            print("请在config.py中设置 DEEPSEEK_API_KEY")
-            return False
-        print("✅ 配置文件检查通过")
+        print("ℹ️ 启动检查已跳过全局大模型 Key 校验")
+        print("ℹ️ 股票分析现在使用登录用户自己的大模型配置，请在页面“环境配置”中设置")
         return True
-    except ImportError:
-        print("❌ 配置文件config.py不存在")
-        return False
+    except Exception as exc:
+        print(f"⚠️ 配置检查提示输出失败: {exc}")
+        return True
 
 def main():
     """主函数"""

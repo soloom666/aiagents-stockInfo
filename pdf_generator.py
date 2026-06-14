@@ -395,7 +395,7 @@ def display_pdf_export_section(stock_info, agents_results, discussion_result, fi
         markdown_button_key = f"markdown_btn_{stock_info.get('symbol', 'unknown')}"
         
         # 生成PDF报告按钮
-        if st.button("📄 生成并下载PDF报告", type="primary", width='content', key=pdf_button_key):
+        if st.button("📄 生成并下载PDF报告", type="primary", key=pdf_button_key):
             with st.spinner("正在生成PDF报告..."):
                 try:
                     # 生成PDF内容
@@ -427,7 +427,7 @@ def display_pdf_export_section(stock_info, agents_results, discussion_result, fi
                     st.error(f"详细错误信息: {traceback.format_exc()}")
         
         # 生成Markdown报告按钮
-        if st.button("📝 生成并下载Markdown报告", type="secondary", width='content', key=markdown_button_key):
+        if st.button("📝 生成并下载Markdown报告", type="secondary", key=markdown_button_key):
             with st.spinner("正在生成Markdown报告..."):
                 try:
                     # 生成Markdown内容
@@ -457,4 +457,3 @@ def display_pdf_export_section(stock_info, agents_results, discussion_result, fi
                     st.error(f"❌ 生成Markdown报告时出错: {str(e)}")
                     import traceback
                     st.error(f"详细错误信息: {traceback.format_exc()}")
-

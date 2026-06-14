@@ -11,6 +11,7 @@ from common.readFile import ReadFile
 from main_force_selector import main_force_selector
 from stock_data import StockDataFetcher
 from ai_agents import StockAnalysisAgents
+from concurrent.futures import ThreadPoolExecutor
 import time
 import json
 from common.extractText import split_text, extract_stock_codes
@@ -106,29 +107,34 @@ class MainForceAnalyzer:
             # 准备整体数据摘要
             overall_summary = self._prepare_overall_summary(filtered_data)
             
-            # AI推荐-主力选股：三大分析师整体分析
-            fund_flow_analysis = self._fund_flow_overall_analysis(filtered_data, overall_summary)
-            # logger.info('AI推荐-主力选股-资金流向分析', {fund_flow_analysis})
+            # AI推荐-主力选股：三大分析师并行整体分析
+            print("💰📊📈 三大分析师并行运行中...")
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                f_fund        = executor.submit(self._fund_flow_overall_analysis, filtered_data, overall_summary)
+                f_industry    = executor.submit(self._industry_overall_analysis,  filtered_data, overall_summary)
+                f_fundamental = executor.submit(self._fundamental_overall_analysis, filtered_data, overall_summary)
+                fund_flow_analysis   = f_fund.result()
+                industry_analysis    = f_industry.result()
+                fundamental_analysis = f_fundamental.result()
+
             fund_flow_analysis_codes = extract_stock_codes(split_text(fund_flow_analysis, split_char='资金流向推荐'))
             print(f'AI推荐-主力选股-资金流向分析-资金流向推荐 fund_flow_analysis_codes:{fund_flow_analysis_codes}')
 
-            industry_analysis = self._industry_overall_analysis(filtered_data, overall_summary)
-            # logger.info('AI推荐-主力选股-行业板块分析', {industry_analysis})
             industry_analysis_codes = extract_stock_codes(split_text(industry_analysis, split_char='优质标的推荐'))
             print(f'AI推荐-主力选股-行业板块分析-优质标的推荐 industry_analysis_codes:{industry_analysis_codes}')
 
-            fundamental_analysis = self._fundamental_overall_analysis(filtered_data, overall_summary)
-            # logger.info('AI推荐-主力选股-财务基本面分析', {fundamental_analysis})
-            fundamental_analysis_codes = extract_stock_codes(split_text(industry_analysis, split_char='优质标的推荐'))
+            fundamental_analysis_codes = extract_stock_codes(split_text(fundamental_analysis, split_char='优质标的推荐'))
             print(f'AI推荐-主力选股-财务基本面分析-优质标的筛选 fundamental_analysis_codes: {fundamental_analysis_codes}')
             # AI推荐-主力选股写入json
             main_json_data = {
+                "main_stocks": {
                 'fund_flow_analysis_codes': fund_flow_analysis_codes,
                 'industry_analysis_codes': industry_analysis_codes,
                 'fundamental_analysis_codes': fundamental_analysis_codes
             }
+            }
 
-            ReadFile.replase_json_data(ReadFile.getProjectPath() + '\\aitrader\\data\\output\\json\\al_agent_stock_program.json', main_json_data)
+            ReadFile.replase_json_data('/aitrader/data/output/json/al_agent_stock_program.json', main_json_data)
 
             # 保存分析报告到对象属性，供UI展示
             self.fund_flow_analysis = fund_flow_analysis
@@ -251,10 +257,8 @@ class MainForceAnalyzer:
         analysis = self.deepseek_client.call_api(messages, max_tokens=2000)
 
         print("  ✅ 资金流向整体分析完成")
-        time.sleep(1)
-        
         return analysis
-    
+
     def _industry_overall_analysis(self, df: pd.DataFrame, summary: str) -> str:
         """行业板块整体分析"""
         
@@ -306,8 +310,6 @@ class MainForceAnalyzer:
         analysis = self.deepseek_client.call_api(messages, max_tokens=2000)
 
         print("  ✅ 行业板块整体分析完成")
-        time.sleep(1)
-        
         return analysis
     
     def _fundamental_overall_analysis(self, df: pd.DataFrame, summary: str) -> str:
@@ -361,8 +363,6 @@ class MainForceAnalyzer:
         analysis = self.deepseek_client.call_api(messages, max_tokens=1000)
 
         print("  ✅ 财务基本面整体分析完成")
-        time.sleep(1)
-        
         return analysis
     
     def _prepare_data_table(self, df: pd.DataFrame, focus: str = 'all') -> str:
@@ -381,18 +381,14 @@ class MainForceAnalyzer:
             key_columns.extend(industry_cols[:1])
         
         # 智能匹配区间涨跌幅列
-        interval_pct_col = None
-        possible_names = [
-            '区间涨跌幅:前复权', '区间涨跌幅:前复权(%)', '区间涨跌幅(%)', 
+        _pct_names = [
+            '区间涨跌幅:前复权', '区间涨跌幅:前复权(%)', '区间涨跌幅(%)',
             '区间涨跌幅', '涨跌幅:前复权', '涨跌幅:前复权(%)', '涨跌幅(%)', '涨跌幅'
         ]
-        for name in possible_names:
-            for col in df.columns:
-                if name in col:
-                    interval_pct_col = col
-                    break
-            if interval_pct_col:
-                break
+        interval_pct_col = next(
+            (col for name in _pct_names for col in df.columns if name in col),
+            None
+        )
         if interval_pct_col:
             key_columns.append(interval_pct_col)
         

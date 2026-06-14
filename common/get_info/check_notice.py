@@ -15,6 +15,8 @@ import os
 import sys
 import time
 from datetime import datetime, timedelta, timezone
+from common.logger import logger
+
 
 # 添加项目根目录到 sys.path，确保能导入 aitrader 模块
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -98,14 +100,14 @@ def search_plate(keyword, plate_type, start_dt, end_dt):
         resp.raise_for_status()
         data = resp.json()
     except requests.exceptions.RequestException as e:
-        print(f"  [ERROR] 请求失败: {e}", file=sys.stderr)
+        logger.info(f"  [ERROR] 请求失败: {e}", file=sys.stderr)
         return []
     except json.JSONDecodeError:
-        print(f"  [ERROR] 响应非 JSON: {resp.text[:300]}", file=sys.stderr)
+        logger.info(f"  [ERROR] 响应非 JSON: {resp.text[:300]}", file=sys.stderr)
         return []
 
     if not data.get("status"):
-        print(f"  [ERROR] API 返回失败: {data.get('msg', data.get('message', str(data)[:200]))}", file=sys.stderr)
+        logger.info(f"  [ERROR] API 返回失败: {data.get('msg', data.get('message', str(data)[:200]))}", file=sys.stderr)
         return []
 
     rows = data.get("data", {}).get("root", [])
@@ -151,8 +153,8 @@ def compare_and_notify(old_data, new_data):
     removed_ids = set(old_map.keys()) - set(new_map.keys())
 
     if not new_ids and not removed_ids:
-        print("📭 公告无变化，不发送邮件")
-        return
+        logger.info("📭 公告无变化，不发送邮件")
+        return True
 
     lines = ["【中化供应链平台 - 公告变化提醒】\n"]
     lines.append(f"查询时间: {new_data['queryTime']}")
@@ -179,32 +181,33 @@ def compare_and_notify(old_data, new_data):
     lines.append("系统邮件请勿回复。")
 
     content = "\n".join(lines)
-    print(f"\n📧 检测到公告变化，发送邮件...")
-    success = emailSendContent(content, title="中化供应链平台 公告变化提醒")
+    logger.info(f"\n📧 检测到公告变化，发送邮件...")
+    success = emailSendContent(content, title="中化供应链平台 保安/安保公告变化提醒")
     if success:
-        print("✅ 邮件发送成功")
+        logger.info("✅ 邮件发送成功")
     else:
-        print("❌ 邮件发送失败")
+        logger.info("❌ 邮件发送失败")
+    return success
 
 
 def main():
     start_dt, end_dt = date_range()
 
-    print(f"查询时间范围: {start_dt.strftime('%Y-%m-%d')} ~ {end_dt.strftime('%Y-%m-%d')}")
-    print(f"关键词: {', '.join(KEYWORDS)}")
-    print("=" * 60)
+    logger.info(f"查询时间范围: {start_dt.strftime('%Y-%m-%d')} ~ {end_dt.strftime('%Y-%m-%d')}")
+    logger.info(f"关键词: {', '.join(KEYWORDS)}")
+    logger.info("=" * 60)
 
     all_results = {}  # plate_type_label -> {keyword: [items]}
     seen_ids = set()  # 跨分类去重
 
     for plate_label, plate_type in PLATE_TYPES.items():
-        print(f"\n{'='*60}")
-        print(f"【{plate_label}】(plateType={plate_type!r})")
-        print(f"{'='*60}")
+        logger.info(f"\n{'='*60}")
+        logger.info(f"【{plate_label}】(plateType={plate_type!r})")
+        logger.info(f"{'='*60}")
 
         all_results[plate_label] = {}
         for kw in KEYWORDS:
-            print(f"  搜索「{kw}」...")
+            logger.info(f"  搜索「{kw}」...")
             items = search_plate(kw, plate_type, start_dt, end_dt)
             # 去重: 若公告已在其他分类出现则跳过
             deduped = []
@@ -214,26 +217,26 @@ def main():
                     seen_ids.add(nid)
                     deduped.append(item)
             all_results[plate_label][kw] = deduped
-            print(f"    → 找到 {len(deduped)} 条")
+            logger.info(f"    → 找到 {len(deduped)} 条")
 
     # ---- 打印结果 ----
-    print("\n\n" + "=" * 60)
-    print("📋 结果汇总")
-    print("=" * 60)
+    logger.info("\n\n" + "=" * 60)
+    logger.info("📋 结果汇总")
+    logger.info("=" * 60)
 
     total_found = 0
     for plate_label, kw_results in all_results.items():
         for kw, items in kw_results.items():
             if items:
                 total_found += len(items)
-                print(f"\n【{plate_label}】「{kw}」— {len(items)} 条:")
+                logger.info(f"\n【{plate_label}】「{kw}」— {len(items)} 条:")
                 for i, item in enumerate(items, 1):
-                    print(f"  {i}. {item['title']}")
-                    print(f"     日期: {item['auditDate'][:10] if item['auditDate'] else 'N/A'}")
-                    print(f"     链接: {item['url']}")
+                    logger.info(f"  {i}. {item['title']}")
+                    logger.info(f"     日期: {item['auditDate'][:10] if item['auditDate'] else 'N/A'}")
+                    logger.info(f"     链接: {item['url']}")
 
     if total_found == 0:
-        print(f"\n😔 最近 15 天没有找到{KEYWORDS}相关公告。")
+        logger.info(f"\n😔 最近 15 天没有找到{KEYWORDS}相关公告。")
 
     # ---- 加载旧数据用于对比 ----
     old_data = load_old_results()
@@ -255,17 +258,18 @@ def main():
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
-    print(f"\n✅ 结果已写入: {output_path}")
+    logger.info(f"\n✅ 结果已写入: {output_path}")
 
     # ---- 对比变化并发送邮件 ----
+    email_ok = True
     if old_data is not None:
-        compare_and_notify(old_data, output_data)
+        email_ok = compare_and_notify(old_data, output_data)
     else:
-        print("📝 首次运行，已保存 notice.json，无历史数据可对比")
+        logger.info("📝 首次运行，已保存 notice.json，无历史数据可对比")
 
-    return total_found
+    return total_found, email_ok
 
 
 if __name__ == "__main__":
-    count = main()
-    sys.exit(0 if count > 0 else 1)
+    count, email_ok = main()
+    sys.exit(0 if email_ok else 1)

@@ -12,6 +12,7 @@ import os
 import sys
 import time
 from datetime import datetime
+from common.logger import logger
 
 # 添加项目根目录到 sys.path，确保能导入 aitrader 模块
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -59,7 +60,7 @@ def api_post(path, body, timeout=15):
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.RequestException as e:
-        print(f"[ERROR] API 请求失败: {path} - {e}", file=sys.stderr)
+        logger.info(f"[ERROR] API 请求失败: {path} - {e}", file=sys.stderr)
         return None
 
 
@@ -111,9 +112,9 @@ def check_house_count(project_id, room_type):
 
 def send_notification(message):
     """发送通知 — 通过邮件推送"""
-    print("=" * 50)
-    print(message)
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info(message)
+    logger.info("=" * 50)
 
 
 def load_old_results():
@@ -146,8 +147,8 @@ def compare_and_notify(old_data, new_data):
     rentable_changed = old_data.get("project", {}).get("rentableCount") != new_data.get("project", {}).get("rentableCount")
 
     if not new_names and not removed_names and not count_changed and not rentable_changed:
-        print("📭 房源无变化，不发送邮件")
-        return
+        logger.info("📭 房源无变化，不发送邮件")
+        return True
 
     lines = ["【浦东公租房 - 房源变化提醒】\n"]
     lines.append(f"查询时间: {new_data['queryTime']}")
@@ -190,16 +191,17 @@ def compare_and_notify(old_data, new_data):
     lines.append("系统邮件请勿回复。")
 
     content = "\n".join(lines)
-    print(f"\n📧 检测到房源变化，发送邮件...")
+    logger.info(f"\n📧 检测到房源变化，发送邮件...")
     success = emailSendContent(content, title="浦东公租房 房源变化提醒")
     if success:
-        print("✅ 邮件发送成功")
+        logger.info("✅ 邮件发送成功")
     else:
-        print("❌ 邮件发送失败")
+        logger.info("❌ 邮件发送失败")
+    return success
 
 
 def main():
-    print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 检查浦东公租房: {TOWN} + {ROOM_TYPE_NAME}")
+    logger.info(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] 检查浦东公租房: {TOWN} + {ROOM_TYPE_NAME}")
 
     # 0. 加载旧数据
     old_data = load_old_results()
@@ -207,15 +209,15 @@ def main():
     # 1. 查找航头镇的项目
     project = find_town_project_id(TOWN)
     if not project:
-        print(f"[INFO] 未找到 {TOWN} 的项目")
+        logger.info(f"[INFO] 未找到 {TOWN} 的项目")
         return
 
-    print(f"[INFO] 找到项目: {project['name']} (ID={project['id']})")
-    print(f"[INFO] 项目总房源: {project['houseCount']}, 可租房源: {project['rentableCount']}")
+    logger.info(f"[INFO] 找到项目: {project['name']} (ID={project['id']})")
+    logger.info(f"[INFO] 项目总房源: {project['houseCount']}, 可租房源: {project['rentableCount']}")
 
     # 2. 查询两室房源
     total, items = check_house_count(project["id"], ROOM_TYPE)
-    print(f"[INFO] {TOWN} + {ROOM_TYPE_NAME}: 可租房源数 = {total}")
+    logger.info(f"[INFO] {TOWN} + {ROOM_TYPE_NAME}: 可租房源数 = {total}")
 
     # 3. 构建结果数据
     houses = []
@@ -244,7 +246,7 @@ def main():
     # 4. 写入 house.json
     with open(get_output_path(), "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
-    print(f"✅ 结果已写入: {get_output_path()}")
+    logger.info(f"✅ 结果已写入: {get_output_path()}")
 
     # 5. 打印房源详情
     if total > 0:
@@ -257,25 +259,26 @@ def main():
         )
         send_notification(msg)
 
-        print(f"\n📋 房源详情:")
+        logger.info(f"\n📋 房源详情:")
         for item in houses:
-            print(f"   - {item['fullName']}")
-            print(f"     面积: {item['rentalArea']}m²  "
+            logger.info(f"   - {item['fullName']}")
+            logger.info(f"     面积: {item['rentalArea']}m²  "
                   f"楼层: {item['floorName']}  "
                   f"朝向: {item['toward']}")
     else:
-        print(f"😔 {TOWN} 目前没有 {ROOM_TYPE_NAME} 房源可租。")
-        print(f"   可租房源总数: {project['rentableCount']} 套（非两室户型）")
+        logger.info(f"😔 {TOWN} 目前没有 {ROOM_TYPE_NAME} 房源可租。")
+        logger.info(f"   可租房源总数: {project['rentableCount']} 套（非两室户型）")
 
     # 6. 对比变化并发送邮件
+    email_ok = True
     if old_data is not None:
-        compare_and_notify(old_data, output_data)
+        email_ok = compare_and_notify(old_data, output_data)
     else:
-        print("📝 首次运行，已保存 house.json，无历史数据可对比")
+        logger.info("📝 首次运行，已保存 house.json，无历史数据可对比")
 
-    return total
+    return total, email_ok
 
 
 if __name__ == "__main__":
-    count = main()
-    sys.exit(0 if count > 0 else 1)
+    count, email_ok = main()
+    sys.exit(0 if email_ok else 1)

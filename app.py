@@ -19,7 +19,7 @@ from main_force_ui import display_main_force_selector
 from sector_strategy_ui import display_sector_strategy
 from longhubang_ui import display_longhubang
 from smart_monitor_ui import smart_monitor_ui
-from auth_ui import is_logged_in, show_login_page, show_sidebar_user_info, show_user_management, current_user
+from auth_ui import is_logged_in, show_login_page, show_sidebar_user_info, show_user_management, current_user, check_persistent_login
 from auth import get_runtime_llm_config, update_user_llm_config
 from scheduled_tasks_ui import display_scheduled_tasks
 
@@ -289,6 +289,7 @@ st.markdown("""
 
 def main():
     # ── 登录检查 ──────────────────────────────────
+    check_persistent_login()
     if not is_logged_in():
         show_login_page()
         return

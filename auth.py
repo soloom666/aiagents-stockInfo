@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 import time
 import pymysql
@@ -127,6 +128,40 @@ def _hash_password(password: str, salt: str = None) -> tuple[str, str]:
         salt = os.urandom(16).hex()
     pw_hash = hashlib.sha256((password + salt).encode("utf-8")).hexdigest()
     return pw_hash, salt
+
+
+# session token 签名密钥（进程级随机生成，重启后所有 token 失效，需重新登录）
+_SESSION_SECRET = os.urandom(32).hex()
+_TOKEN_VALIDITY_SECONDS = 7 * 24 * 3600  # 7 天
+
+
+def generate_session_token(user_id: int) -> str:
+    """生成带签名的 session token，格式: user_id.expiry.salt.signature"""
+    expiry = int(time.time()) + _TOKEN_VALIDITY_SECONDS
+    salt = os.urandom(8).hex()
+    payload = f"{user_id}.{expiry}.{salt}"
+    sig = hmac.new(_SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:32]
+    return f"{payload}.{sig}"
+
+
+def validate_session_token(token: str) -> dict | None:
+    """验证 session token，成功返回用户信息字典，失败返回 None"""
+    try:
+        parts = token.rsplit(".", 1)
+        if len(parts) != 2:
+            return None
+        payload, sig = parts
+        expected_sig = hmac.new(_SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:32]
+        if not hmac.compare_digest(sig, expected_sig):
+            return None
+        user_id_str, expiry_str, _salt = payload.split(".", 2)
+        user_id = int(user_id_str)
+        expiry = int(expiry_str)
+        if time.time() > expiry:
+            return None
+        return get_user_by_id(user_id)
+    except (ValueError, AttributeError):
+        return None
 
 
 def init_user_table():

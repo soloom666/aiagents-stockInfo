@@ -16,6 +16,8 @@ from auth import (
     get_role_label,
     sync_runtime_llm_env,
     clear_runtime_llm_env,
+    generate_session_token,
+    validate_session_token,
     ROLE_OPTIONS,
 )
 from model_config import model_options, get_model_label, build_model_options_with_current
@@ -59,12 +61,33 @@ def logout():
         if key in st.session_state:
             del st.session_state[key]
     clear_runtime_llm_env()
+    st.query_params.pop("_t", None)
     st.rerun()
 
 
 # ──────────────────────────────────────────────
 # 登录页
 # ──────────────────────────────────────────────
+
+def check_persistent_login() -> bool:
+    """检查 URL query params 中是否有有效 session token，有则自动恢复登录状态"""
+    try:
+        token = st.query_params.get("_t")
+        if not token:
+            return False
+        user = validate_session_token(token)
+        if user:
+            st.session_state.logged_in = True
+            st.session_state.auth_user = user
+            sync_runtime_llm_env(user)
+            return True
+        else:
+            # token 无效或过期，清除
+            st.query_params.pop("_t", None)
+    except Exception:
+        pass
+    return False
+
 
 def show_login_page():
     """展示登录页面，未通过认证时调用"""
@@ -116,6 +139,7 @@ def show_login_page():
                     st.session_state.logged_in = True
                     st.session_state.auth_user = user
                     sync_runtime_llm_env(user)
+                    st.query_params["_t"] = generate_session_token(user["id"])
                     st.success(f"欢迎回来，{user['username']}！")
                     st.rerun()
                 else:

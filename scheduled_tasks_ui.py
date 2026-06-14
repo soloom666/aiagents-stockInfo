@@ -192,6 +192,11 @@ def display_scheduled_tasks():
         with col_m:
             custom_min = st.number_input("执行分", min_value=0, max_value=59, value=0, key="new_custom_min")
         custom_time = f"{int(custom_hour):02d}:{int(custom_min):02d}"
+        email_receiver = st.text_input(
+            "邮件通知收件人（可选，多人用逗号分隔）",
+            placeholder="例如: a@163.com, b@163.com",
+            key="new_custom_email",
+        )
         if st.button("💾 保存新增任务", use_container_width=True):
             manager.save_custom_task(
                 {
@@ -201,6 +206,7 @@ def display_scheduled_tasks():
                     "time": custom_time,
                     "enabled": enabled,
                     "schedule_type": schedule_type,
+                    "email_receiver": email_receiver.strip(),
                 }
             )
             st.success(
@@ -222,11 +228,13 @@ def display_scheduled_tasks():
                     st.markdown(f"### 🧩 {task.get('name', task_id)}")
                     task_meta = TASK_FUNCTION_DEFINITIONS.get(task.get("function"), {})
                     data_source_desc = task.get("data_source") if task_meta.get("supports_data_source") else "无需设置"
+                    email_info = f" | 邮件：{task.get('email_receiver')}" if task.get("email_receiver") else ""
                     st.caption(
                         f"功能：{CUSTOM_TASK_FUNCTIONS.get(task.get('function'), task.get('function'))} | "
                         f"执行日：{EXECUTION_DAY_OPTIONS.get(task.get('schedule_type', 'daily'), '每天')} | "
                         f"时间：{task.get('time')} | 数据源：{data_source_desc} | "
                         f"{'启用' if task.get('enabled') else '禁用'}"
+                        f"{email_info}"
                     )
                     if hist.get("last_run"):
                         st.caption(
@@ -292,6 +300,13 @@ def display_scheduled_tasks():
                             edit_data_source = edit_allowed_sources[0]
                             st.text_input("数据源选择", value=edit_data_source, disabled=True, key=f"edit_data_source_disabled_{task_id}")
 
+                        edit_email_receiver = st.text_input(
+                            "邮件通知收件人（可选，多人用逗号分隔）",
+                            value=task.get("email_receiver", ""),
+                            placeholder="例如: a@163.com, b@163.com",
+                            key=f"edit_email_{task_id}",
+                        )
+
                         if st.form_submit_button("💾 保存修改", use_container_width=True):
                             manager.save_custom_task(
                                 {
@@ -302,6 +317,7 @@ def display_scheduled_tasks():
                                     "time": f"{int(edit_hour):02d}:{int(edit_min):02d}",
                                     "enabled": edit_enabled,
                                     "schedule_type": edit_day,
+                                    "email_receiver": edit_email_receiver.strip(),
                                 }
                             )
                             st.success("已保存自定义任务修改")

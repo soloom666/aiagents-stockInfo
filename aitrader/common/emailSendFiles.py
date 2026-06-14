@@ -1,4 +1,4 @@
-#!/user/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os
 import sys
@@ -14,6 +14,152 @@ from common.logger import logger
 from common.readFile import ReadFile
 
 
+# ============================================================
+# 内部辅助
+# ============================================================
+
+def _load_email_config():
+    """加载邮件 SMTP 配置，返回 (smtp_config_dict, full_yaml_data)"""
+    yamlData = ReadFile.get_yamlAllPath("/config/emailConfig.yaml")
+    emailCon = yamlData["emailService"]["oStMailCofig"]
+    return emailCon, yamlData
+
+
+def _get_task_receiver(task_id):
+    """获取指定任务的收件人列表，不存在则回退到 default → 全局 receiver"""
+    _, yamlData = _load_email_config()
+    task_email_cfg = yamlData.get("taskEmail", {})
+    cfg = task_email_cfg.get(task_id) or task_email_cfg.get("default", {})
+    receiver = cfg.get("receiver", yamlData.get("receiver", ""))
+    if isinstance(receiver, str):
+        receiver = [r.strip() for r in receiver.split(",") if r.strip()]
+    return receiver
+
+
+def _close_server(server):
+    try:
+        server.quit()
+    except Exception:
+        pass
+
+
+def _send_email_impl(receiver, subject, body_text, body_html=None):
+    """底层 SMTP 发送（SSL），支持纯文本 + 可选 HTML"""
+    emailCon, _ = _load_email_config()
+    smtp_server = emailCon["MAIL_SERVER"]
+    port = emailCon["MAIL_PROT"]
+    sender_email = emailCon["MAIL_USERNAME"]
+    password = emailCon["MAIL_PASSWORD"]
+
+    print(f"[EMAIL] SMTP: {smtp_server}:{port}  sender={sender_email}  receivers={receiver}")
+
+    if not password:
+        print(f"[EMAIL] 失败: MAIL_PASSWORD 为空", file=sys.stderr)
+        return False
+    if not receiver:
+        print(f"[EMAIL] 失败: receiver 为空", file=sys.stderr)
+        return False
+
+    # 构建邮件
+    subtype = "alternative" if body_html else "mixed"
+    msg = MIMEMultipart(subtype)
+    msg["From"] = "stockmonitor@qq.com"
+    msg["To"] = ", ".join(receiver) if isinstance(receiver, list) else receiver
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+    if body_html:
+        msg.attach(MIMEText(body_html, "html", "utf-8"))
+
+    # 连接 SMTP
+    print(f"[EMAIL] 连接 SMTP {smtp_server}:{port} (timeout=30s)...")
+    try:
+        server = smtplib.SMTP_SSL(smtp_server, port, timeout=30)
+    except socket.gaierror as e:
+        print(f"[EMAIL] 失败: DNS 解析失败 {smtp_server}: {e}", file=sys.stderr)
+        return False
+    except socket.timeout as e:
+        print(f"[EMAIL] 失败: 连接超时 {smtp_server}:{port}: {e}", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"[EMAIL] 失败: 连接异常 {type(e).__name__}: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return False
+
+    print(f"[EMAIL] SMTP 连接成功, 登录并发送...")
+    try:
+        server.login(sender_email, password)
+        raw = msg.as_string()
+        server.sendmail(sender_email, receiver, raw)
+        _close_server(server)
+        logger.info(f"[EMAIL] 发送成功 subject={subject} receivers={receiver}")
+        print(f"[EMAIL] ====== 邮件发送成功 ======")
+        return True
+    except smtplib.SMTPAuthenticationError as e:
+        print(f"[EMAIL] 失败: SMTP 认证失败: {e}", file=sys.stderr)
+        _close_server(server)
+        return False
+    except Exception as e:
+        print(f"[EMAIL] 失败: {type(e).__name__}: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        _close_server(server)
+        return False
+
+
+# ============================================================
+# 公开接口
+# ============================================================
+
+def send_task_email(task_id, content, title=None, body_html=None, receiver=None):
+    """
+    通用定时任务邮件发送。
+
+    收件人优先级:
+      1. receiver 参数（显式传入，用于 UI 配置的多人发送）
+      2. emailConfig.yaml 的 taskEmail.<task_id>.receiver
+      3. emailConfig.yaml 的 taskEmail.default.receiver
+      4. emailConfig.yaml 的 receiver（全局配置）
+
+    参数:
+        task_id:   任务标识 (如 "xunlong", "check_notice", "check_house")
+        content:   邮件纯文本正文
+        title:     邮件标题
+        body_html: 可选 HTML 正文
+        receiver:  可选，直接指定收件人（逗号分隔字符串或列表），覆盖配置文件
+    返回:
+        True / False
+    """
+    print(f"[EMAIL] ====== 任务邮件 task_id={task_id} ======")
+    print(f"[EMAIL] 标题: {title}")
+    print(f"[EMAIL] 正文: {len(content or '')} 字符, HTML: {'是' if body_html else '否'}")
+
+    try:
+        if receiver:
+            if isinstance(receiver, str):
+                receiver = [r.strip() for r in receiver.split(",") if r.strip()]
+            print(f"[EMAIL] 收件人(来自参数): {receiver}")
+        else:
+            receiver = _get_task_receiver(task_id)
+            print(f"[EMAIL] 收件人(来自 taskEmail.{task_id}): {receiver}")
+    except Exception as e:
+        print(f"[EMAIL] 读取任务邮件配置失败: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return False
+
+    return _send_email_impl(receiver, title, content, body_html)
+
+
+def emailSendContent(content, title='公告变化提醒'):
+    """向后兼容：使用全局 receiver 发送纯文本邮件"""
+    print(f"[EMAIL] ====== 发送邮件 ======")
+    print(f"[EMAIL] 标题: {title}, 正文: {len(content)} 字符")
+
+    _, yamlData = _load_email_config()
+    receiver = yamlData.get("receiver", "")
+    if isinstance(receiver, str):
+        receiver = [r.strip() for r in receiver.split(",") if r.strip()]
+
+    return _send_email_impl(receiver, title, content)
+
 
 def emailSend(title='股市监控信息提醒'):
     logger.info("发送邮件开始...")
@@ -23,34 +169,24 @@ def emailSend(title='股市监控信息提醒'):
     receiver = yamlData["receiver"]
     logger.info(receiver)
 
-    # 配置SMTP服务器和发送者的信息
     smtp_server = emailCon["MAIL_SERVER"]
-    port = emailCon["MAIL_PROT"]  # 或者使用465，取决于你的SMTP服务器配置
+    port = emailCon["MAIL_PROT"]
     sender_email = emailCon["MAIL_USERNAME"]
     password = emailCon["MAIL_PASSWORD"]
 
-    # 创建邮件对象
     msg = MIMEMultipart()
     msg['From'] = "stockmonitor@qq.com"
-    # msg['To'] = receiver
-    msg['To'] = ', '.join(receiver)  # 将收件人列表用逗号分隔开，形成字符串
+    msg['To'] = ', '.join(receiver) if isinstance(receiver, list) else receiver
     msg['Subject'] = title
 
-    # 邮件正文
     body = '您好，这是股市监控信息提醒，系统邮件请勿回复，谢谢！'
     msg.attach(MIMEText(body, 'plain'))
 
-    # 定义模糊匹配的模式，例如匹配所有.txt文件
     pattern = '*.html'
-    # 在当前目录或指定目录下查找匹配的文件
-    # directory = getProjectPath() + "webToPython/webrunReport/reports"
     directory = ReadFile.getProjectPath() + reportPath
-
-    # 使用 os.path.join 来合并目录和模式
     search_path = os.path.join(directory, pattern).replace("\\", '/')
     files = glob.glob(search_path)
     try:
-        # 遍历文件并添加为附件
         for file in files:
             logger.info(f"file:{file}")
             with open(file, 'rb') as f:
@@ -60,16 +196,14 @@ def emailSend(title='股市监控信息提醒'):
                 part.add_header('Content-Disposition', f"attachment; filename= {os.path.basename(file)}")
                 msg.attach(part)
 
-        # 连接到SMTP服务器并发送邮件   避坑：需用SMTP_SSL  服务器环境会报错SMTPServerDisconnected("Connection unexpectedly closed")
         with smtplib.SMTP_SSL(smtp_server, port, timeout=30) as server:
             server.login(sender_email, password)
             text = msg.as_string()
             server.sendmail(sender_email, receiver, text)
-        logger.info("邮件发送成功！")
+        print("邮件发送成功！")
     except Exception as e:
-        logger.info(f"邮件发送失败: {e}", file=sys.stderr)
-        traceback.logger.info_exc(file=sys.stderr)
-
+        print(f"邮件发送失败: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
 
 
 def emailSendParameter(stock_list, title='今日推荐票信息'):
@@ -79,34 +213,24 @@ def emailSendParameter(stock_list, title='今日推荐票信息'):
     reportPath = yamlData["reportPath"]
     receiver = yamlData["receiver"]
 
-    # 配置SMTP服务器和发送者的信息
     smtp_server = emailCon["MAIL_SERVER"]
-    port = emailCon["MAIL_PROT"]  # 或者使用465，取决于你的SMTP服务器配置
+    port = emailCon["MAIL_PROT"]
     sender_email = emailCon["MAIL_USERNAME"]
     password = emailCon["MAIL_PASSWORD"]
 
-    # 创建邮件对象
     msg = MIMEMultipart()
     msg['From'] = "stockmonitor@qq.com"
-    # msg['To'] = receiver
-    msg['To'] = ', '.join(receiver)  # 将收件人列表用逗号分隔开，形成字符串
+    msg['To'] = ', '.join(receiver) if isinstance(receiver, list) else receiver
     msg['Subject'] = title
 
-    # 邮件正文
     body = f'您好，这是今日推荐票信息：{stock_list}，\n \n \n 系统邮件请勿回复，谢谢！'
     msg.attach(MIMEText(body, 'plain'))
 
-    # 定义模糊匹配的模式，例如匹配所有.txt文件
     pattern = '*.html'
-    # 在当前目录或指定目录下查找匹配的文件
-    # directory = getProjectPath() + "webToPython/webrunReport/reports"
     directory = ReadFile.getProjectPath() + reportPath
-
-    # 使用 os.path.join 来合并目录和模式
     search_path = os.path.join(directory, pattern).replace("\\", '/')
     files = glob.glob(search_path)
     try:
-        # 遍历文件并添加为附件
         for file in files:
             logger.info(f"file:{file}")
             with open(file, 'rb') as f:
@@ -116,120 +240,17 @@ def emailSendParameter(stock_list, title='今日推荐票信息'):
                 part.add_header('Content-Disposition', f"attachment; filename= {os.path.basename(file)}")
                 msg.attach(part)
 
-        # 连接到SMTP服务器并发送邮件   避坑：需用SMTP_SSL  服务器环境会报错SMTPServerDisconnected("Connection unexpectedly closed")
         with smtplib.SMTP_SSL(smtp_server, port, timeout=30) as server:
             server.login(sender_email, password)
             text = msg.as_string()
             server.sendmail(sender_email, receiver, text)
-        logger.info("邮件发送成功！")
+        print("邮件发送成功！")
     except Exception as e:
-        logger.info(f"邮件发送失败: {e}", file=sys.stderr)
-        traceback.logger.info_exc(file=sys.stderr)
-
-def emailSendContent(content, title='公告变化提醒'):
-    logger.info(f"[EMAIL] ====== 开始发送邮件 ======")
-    logger.info(f"[EMAIL] 标题: {title}")
-    logger.info(f"[EMAIL] 正文长度: {len(content)} 字符")
-
-    # Step 1: 加载配置
-    logger.info(f"[EMAIL] Step1: 加载邮件配置...")
-    try:
-        yamlData = ReadFile.get_yamlAllPath("/config/emailConfig.yaml")
-        logger.info(f"[EMAIL] Step1: 配置加载成功, keys={list(yamlData.keys())}")
-    except Exception as e:
-        logger.info(f"[EMAIL] Step1 失败: 无法读取 emailConfig.yaml: {e}")
-        traceback.logger.info_exc()
-        return False
-
-    emailCon = yamlData["emailService"]["oStMailCofig"]
-    receiver = yamlData["receiver"]
-    smtp_server = emailCon["MAIL_SERVER"]
-    port = emailCon["MAIL_PROT"]
-    sender_email = emailCon["MAIL_USERNAME"]
-    password = emailCon["MAIL_PASSWORD"]
-
-    logger.info(f"[EMAIL] Step2: SMTP配置 smtp_server={smtp_server} port={port}")
-    logger.info(f"[EMAIL] Step2: sender={sender_email} receiver={receiver}")
-    logger.info(f"[EMAIL] Step2: password={'***' if password else 'EMPTY!'} (长度={len(password) if password else 0})")
-
-    # 校验配置
-    if not smtp_server:
-        logger.info(f"[EMAIL] Step2 失败: MAIL_SERVER 为空", file=sys.stderr)
-        return False
-    if not password:
-        logger.info(f"[EMAIL] Step2 失败: MAIL_PASSWORD 为空", file=sys.stderr)
-        return False
-    if not receiver:
-        logger.info(f"[EMAIL] Step2 失败: receiver 为空", file=sys.stderr)
-        return False
-
-    # Step 3: 构建邮件
-    logger.info(f"[EMAIL] Step3: 构建邮件对象...")
-    msg = MIMEMultipart()
-    msg['From'] = "stockmonitor@qq.com"
-    msg['To'] = ', '.join(receiver) if isinstance(receiver, list) else receiver
-    msg['Subject'] = title
-    msg.attach(MIMEText(content, 'plain'))
-    logger.info(f"[EMAIL] Step3: 邮件对象构建完成")
-
-    # Step 4: 连接 SMTP
-    logger.info(f"[EMAIL] Step4: 连接 SMTP {smtp_server}:{port} (timeout=30s)...")
-    try:
-        server = smtplib.SMTP_SSL(smtp_server, port, timeout=30)
-        logger.info(f"[EMAIL] Step4: SMTP 连接成功, 开始登录...")
-    except socket.gaierror as e:
-        logger.info(f"[EMAIL] Step4 失败: DNS 解析失败 {smtp_server}: {e}", file=sys.stderr)
-        return False
-    except socket.timeout as e:
-        logger.info(f"[EMAIL] Step4 失败: 连接超时 {smtp_server}:{port}: {e}", file=sys.stderr)
-        return False
-    except Exception as e:
-        logger.info(f"[EMAIL] Step4 失败: 连接异常 {type(e).__name__}: {e}", file=sys.stderr)
-        traceback.logger.info_exc(file=sys.stderr)
-        return False
-
-    # Step 5: 登录
-    try:
-        server.login(sender_email, password)
-        logger.info(f"[EMAIL] Step5: 登录成功")
-    except smtplib.SMTPAuthenticationError as e:
-        logger.info(f"[EMAIL] Step5 失败: 认证失败, 请检查邮箱授权码: {e}", file=sys.stderr)
-        try:
-            server.quit()
-        except Exception:
-            pass
-        return False
-    except Exception as e:
-        logger.info(f"[EMAIL] Step5 失败: 登录异常 {type(e).__name__}: {e}", file=sys.stderr)
-        traceback.logger.info_exc(file=sys.stderr)
-        try:
-            server.quit()
-        except Exception:
-            pass
-        return False
-
-    # Step 6: 发送
-    logger.info(f"[EMAIL] Step6: 发送邮件...")
-    try:
-        text = msg.as_string()
-        logger.info(f"[EMAIL] Step6: 邮件序列化完成, 大小={len(text)} 字节")
-        send_result = server.sendmail(sender_email, receiver, text)
-        logger.info(f"[EMAIL] Step6: sendmail 返回: {send_result} (空dict=全部成功)")
-        server.quit()
-        logger.info(f"[EMAIL] Step6: 发送完成, SMTP 连接已关闭")
-        logger.info(f"[EMAIL] ====== 邮件发送成功 ======")
-        return True
-    except Exception as e:
-        logger.info(f"[EMAIL] Step6 失败: {type(e).__name__}: {e}", file=sys.stderr)
-        traceback.logger.info_exc(file=sys.stderr)
-        try:
-            server.quit()
-        except Exception:
-            pass
-        return False
+        print(f"邮件发送失败: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
 
 
 if __name__ == '__main__':
-    logger.info("发送邮件开始")
+    print("发送邮件开始")
     emailSend('600689 股票监控信息提醒')
     emailSendParameter(['600689', '600690', '600691'])

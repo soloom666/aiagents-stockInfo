@@ -58,3 +58,15 @@ MYSQL_Cofig: {
 reportPath: "reports"
 #receiver: ["bixiaolan@sinochem.com", "yekai01@sinochem.com", "v-luojin5@sinochem.com", "haokecun@sinochem.com", "v-luchao3@sinochem.com", "v-heqing3@sinochem.com"]
 receiver: "17521672466@163.com"
+
+# 定时任务邮件配置 — 每个任务可独立配置收件人和标题前缀
+# task_id 为定时任务标识，default 作为兜底配置
+taskEmail:
+  default:
+    receiver: "17521672466@163.com"
+  xunlong:
+    receiver: "17521672466@163.com"
+  check_notice:
+    receiver: "17521672466@163.com"
+  check_house:
+    receiver: "17521672466@163.com"

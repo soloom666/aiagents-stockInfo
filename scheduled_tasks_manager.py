@@ -368,15 +368,15 @@ def _run_check_notice():
         script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "common", "get_info", "check_notice.py")
         result = subprocess.run(
             [sys.executable, script_path],
-            capture_output=True, text=True, timeout=120,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
             cwd=os.path.dirname(os.path.abspath(__file__)),
         )
-        output = result.stdout.strip()
+        output = (result.stdout or "").strip()
         if output:
             for line in output.splitlines():
                 print(f"[定时任务]   {line}")
         if result.returncode != 0:
-            stderr = result.stderr.strip()
+            stderr = (result.stderr or "").strip()
             if stderr:
                 print(f"[定时任务]   stderr: {stderr[:500]}")
         status = "✓ 完成" if result.returncode == 0 else f"✗ 退出码 {result.returncode}"
@@ -397,15 +397,15 @@ def _run_check_house():
         script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "common", "get_info", "check_house.py")
         result = subprocess.run(
             [sys.executable, script_path],
-            capture_output=True, text=True, timeout=120,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
             cwd=os.path.dirname(os.path.abspath(__file__)),
         )
-        output = result.stdout.strip()
+        output = (result.stdout or "").strip()
         if output:
             for line in output.splitlines():
                 print(f"[定时任务]   {line}")
         if result.returncode != 0:
-            stderr = result.stderr.strip()
+            stderr = (result.stderr or "").strip()
             if stderr:
                 print(f"[定时任务]   stderr: {stderr[:500]}")
         status = "✓ 完成" if result.returncode == 0 else f"✗ 退出码 {result.returncode}"
@@ -419,40 +419,50 @@ def _run_check_house():
         _update_last_run("check_house", False, str(e))
 
 
-def _send_xunlong_email(result: Dict):
-    """发送寻龙记邮件到 17521672466@163.com"""
-    try:
-        from email.mime.multipart import MIMEMultipart
-        from email.mime.text import MIMEText
-        import smtplib
-        from common.readFile import ReadFile
+def _send_xunlong_email(result: Dict, email_receiver=None):
+    """通过通用 send_task_email 发送寻龙记 HTML 邮件"""
+    from aitrader.common.emailSendFiles import send_task_email
 
-        yaml_data = ReadFile.get_yamlAllPath("\\config\\emailConfig.yaml")
-        email_con = yaml_data["emailService"]["oStMailCofig"]
+    macd_stocks = result.get("macd") or []
+    yaogu_stocks = result.get("yaogu") or []
+    diff_stocks = result.get("diff") or []
+    al_agent = result.get("al_agent_stocks") or {}
 
-        macd_stocks = result.get("macd") or []
-        yaogu_stocks = result.get("yaogu") or []
-        diff_stocks = result.get("diff") or []
-        al_agent = result.get("al_agent_stocks") or {}
+    def _fmt_list(lst):
+        if not lst:
+            return "无"
+        if isinstance(lst, list):
+            return "、".join(str(x) for x in lst)
+        return str(lst)
 
-        def _fmt_list(lst):
-            if not lst:
-                return "无"
-            if isinstance(lst, list):
-                return "、".join(str(x) for x in lst)
-            return str(lst)
-
-        main_stocks = al_agent.get("main_stocks", {}) if al_agent else {}
-        agent_lines = ""
-        if main_stocks:
-            agent_lines = f"""
+    main_stocks = al_agent.get("main_stocks", {}) if al_agent else {}
+    agent_lines = ""
+    if main_stocks:
+        agent_lines = f"""
 <tr><td style="padding:8px;color:#888;">资金流向推荐</td><td style="padding:8px;">{_fmt_list(main_stocks.get('fund_flow_analysis_codes'))}</td></tr>
 <tr><td style="padding:8px;color:#888;">行业分析推荐</td><td style="padding:8px;">{_fmt_list(main_stocks.get('industry_analysis_codes'))}</td></tr>
 <tr><td style="padding:8px;color:#888;">基本面推荐</td><td style="padding:8px;">{_fmt_list(main_stocks.get('fundamental_analysis_codes'))}</td></tr>
 """
-        lhb_stocks = _fmt_list(al_agent.get("longhuban_stocks")) if al_agent else "无"
+    lhb_stocks = _fmt_list(al_agent.get("longhuban_stocks")) if al_agent else "无"
 
-        body_html = f"""
+    report_date = datetime.now().strftime("%Y-%m-%d")
+    title = f"🔮 寻龙记选股报告 {report_date}"
+
+    # 纯文本正文（邮件客户端不支持 HTML 时的回退）
+    plain_text = f"""寻龙记 · 今日选股报告
+
+报告时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+MACD策略：{_fmt_list(macd_stocks)}
+妖股策略：{_fmt_list(yaogu_stocks)}
+AI龙虎榜：{lhb_stocks}
+新增变化：{_fmt_list(diff_stocks)}
+
+系统自动发送，请勿回复。
+"""
+
+    # HTML 正文
+    body_html = f"""
 <html><body style="font-family:Arial,sans-serif;background:#f5f5f5;padding:20px;">
 <div style="background:white;border-radius:10px;padding:24px;max-width:600px;margin:0 auto;
             box-shadow:0 2px 8px rgba(0,0,0,0.1);">
@@ -475,19 +485,12 @@ def _send_xunlong_email(result: Dict):
 </div>
 </body></html>
 """
-        receiver = "17521672466@163.com"
-        msg = MIMEMultipart("alternative")
-        msg["From"] = email_con["MAIL_USERNAME"]
-        msg["To"] = receiver
-        msg["Subject"] = f"🔮 寻龙记选股报告 {datetime.now().strftime('%Y-%m-%d')}"
-        msg.attach(MIMEText(body_html, "html", "utf-8"))
 
-        with smtplib.SMTP_SSL(email_con["MAIL_SERVER"], email_con["MAIL_PROT"]) as server:
-            server.login(email_con["MAIL_USERNAME"], email_con["MAIL_PASSWORD"])
-            server.sendmail(email_con["MAIL_USERNAME"], receiver, msg.as_string())
-        print(f"[定时任务] ✓ 寻龙记邮件已发送至 {receiver}")
-    except Exception as e:
-        print(f"[定时任务] ✗ 寻龙记邮件发送失败: {e}")
+    success = send_task_email("xunlong", plain_text, title=title, body_html=body_html, receiver=email_receiver)
+    if success:
+        print(f"[定时任务] ✓ 寻龙记邮件已发送")
+    else:
+        print(f"[定时任务] ✗ 寻龙记邮件发送失败")
 
 
 # ── 运行历史记录 ─────────────────────────────────────────────────
@@ -667,6 +670,14 @@ class ScheduledTasksManager:
     def _dispatch_custom_task(self, task: Dict[str, Any]):
         function = task.get("function")
         data_source = task.get("data_source", DATA_SOURCE_ALL)
+        email_receiver = task.get("email_receiver", "")
+
+        # 将页面配置的邮件收件人注入到环境变量，供子进程脚本读取
+        if email_receiver:
+            os.environ["TASK_EMAIL_RECEIVER"] = str(email_receiver)
+        else:
+            os.environ.pop("TASK_EMAIL_RECEIVER", None)
+
         if function == "main_force":
             return _run_main_force()
         if function == "sector_strategy":
@@ -677,7 +688,7 @@ class ScheduledTasksManager:
             from aitrader.a_self_Strategy.ai_analysis.ai_analysis_run import AiAnalysis
             result = AiAnalysis.xunlong(data_source=data_source, fast_mode=True)
             if result:
-                _send_xunlong_email(result)
+                _send_xunlong_email(result, email_receiver=email_receiver or None)
             return result
         if function == "long_term_investment":
             return _run_long_term_investment(data_source=data_source)

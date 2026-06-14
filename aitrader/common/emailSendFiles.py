@@ -7,6 +7,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
+from email.utils import formatdate, make_msgid
+from email.header import Header
 import smtplib
 import socket
 import glob
@@ -63,9 +65,13 @@ def _send_email_impl(receiver, subject, body_text, body_html=None):
     # 构建邮件
     subtype = "alternative" if body_html else "mixed"
     msg = MIMEMultipart(subtype)
-    msg["From"] = "stockmonitor@qq.com"
-    msg["To"] = ", ".join(receiver) if isinstance(receiver, list) else receiver
-    msg["Subject"] = subject
+    msg["From"] = f"AI股票分析系统 <{sender_email}>"
+    to_addrs = ", ".join(receiver) if isinstance(receiver, list) else receiver
+    msg["To"] = to_addrs
+    msg["Subject"] = Header(subject, "utf-8")
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid(domain=sender_email.split("@")[-1])
+    msg["X-Mailer"] = "AIStockAgent"
     msg.attach(MIMEText(body_text, "plain", "utf-8"))
     if body_html:
         msg.attach(MIMEText(body_html, "html", "utf-8"))
@@ -175,7 +181,7 @@ def emailSend(title='股市监控信息提醒'):
     password = emailCon["MAIL_PASSWORD"]
 
     msg = MIMEMultipart()
-    msg['From'] = "stockmonitor@qq.com"
+    msg['From'] = sender_email
     msg['To'] = ', '.join(receiver) if isinstance(receiver, list) else receiver
     msg['Subject'] = title
 
@@ -219,7 +225,7 @@ def emailSendParameter(stock_list, title='今日推荐票信息'):
     password = emailCon["MAIL_PASSWORD"]
 
     msg = MIMEMultipart()
-    msg['From'] = "stockmonitor@qq.com"
+    msg['From'] = sender_email
     msg['To'] = ', '.join(receiver) if isinstance(receiver, list) else receiver
     msg['Subject'] = title
 

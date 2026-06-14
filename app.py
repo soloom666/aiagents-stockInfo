@@ -8,6 +8,7 @@ import re
 import ast
 # 从新的配置文件导入模型配置
 from model_config import model_options, get_model_label, build_model_options_with_current
+from datetime import datetime
 from stock_data import StockDataFetcher
 from ai_agents import StockAnalysisAgents
 from pdf_generator import display_pdf_export_section
@@ -2416,6 +2417,40 @@ def display_config_manager():
             st.info("ℹ️ 未设置Tushare Token，系统将使用其他数据源")
 
         st.info("💡 如何获取Tushare Token？\n\n1. 访问 https://tushare.pro\n2. 注册账号\n3. 进入个人中心\n4. 获取Token\n5. 复制并粘贴到上方输入框")
+
+        st.markdown("---")
+        st.markdown("### 📂 自选股票池")
+        st.markdown("上传Excel文件替换当前的自选股票池，用于量化策略选股。")
+
+        target_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "aitrader", "data", "input", "myStock")
+        target_path = os.path.join(target_dir, "我的自选.xlsx")
+
+        if os.path.exists(target_path):
+            file_size = os.path.getsize(target_path)
+            file_mtime = datetime.fromtimestamp(os.path.getmtime(target_path)).strftime("%Y-%m-%d %H:%M:%S")
+            st.info(f"📄 当前文件: `我的自选.xlsx` | 大小: {file_size/1024:.1f} KB | 修改时间: {file_mtime}")
+        else:
+            st.warning("⚠️ 当前无自选股票池文件")
+
+        uploaded_file = st.file_uploader(
+            "选择Excel文件上传",
+            type=["xlsx", "xls"],
+            help="支持 .xlsx / .xls 格式，上传后将替换现有的 我的自选.xlsx",
+            key="upload_mystock"
+        )
+
+        if uploaded_file is not None:
+            if st.button("📤 确认上传并替换", type="primary", key="confirm_upload_mystock"):
+                try:
+                    os.makedirs(target_dir, exist_ok=True)
+                    with open(target_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+                    st.success(f"✅ 上传成功！已替换为 `我的自选.xlsx` (大小: {uploaded_file.size/1024:.1f} KB)")
+                    st.cache_data.clear()
+                    time.sleep(1)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ 上传失败: {e}")
 
     with tab3:
         st.markdown("### MiniQMT量化交易配置（可选）")

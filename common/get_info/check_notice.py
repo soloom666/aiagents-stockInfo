@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-搜索中化供应链平台招投标/非招投标公告中「保安」「安保」关键词。
+搜索中化供应链平台招投标/非招投标公告中关键词。
 平台: https://scm.esinochem.com
 
 用法:
@@ -32,14 +32,14 @@ if sys.platform == "win32":
 # Cookie 有效期短，过期后需重新从浏览器复制
 COOKIE = "_oo_s=rum=1&id=a9fe58c0-f750-4698-a41e-de0658826286&created=1781422895953&expire=1781423827554&logs=1"
 
-KEYWORDS = ["保安", "安保"]
+KEYWORDS = ["保安", "安保", "绿化"]
 DAYS_BACK = 15
 
 # 公告类型 — 两个 curl 命令中都是 Bid，猜测非招投标可能是空或 Other
 # 若实际 plateType 不同，修改此配置
 PLATE_TYPES = {
     "招投标公告": "Bid",
-    "非招投标公告": "",          # 空字符串表示不过滤 plateType
+    "非招投标公告": "UnBid",          # 空字符串表示不过滤 plateType
 }
 
 BASE_URL = "https://scm.esinochem.com"
@@ -154,7 +154,7 @@ def compare_and_notify(old_data, new_data):
         print("📭 公告无变化，不发送邮件")
         return
 
-    lines = ["【中化供应链平台 - 保安/安保公告变化提醒】\n"]
+    lines = ["【中化供应链平台 - 公告变化提醒】\n"]
     lines.append(f"查询时间: {new_data['queryTime']}")
     lines.append(f"日期范围: {new_data['dateRange']['start']} ~ {new_data['dateRange']['end']}")
     lines.append(f"公告总数: {old_data['totalFound']} → {new_data['totalFound']}\n")
@@ -180,7 +180,7 @@ def compare_and_notify(old_data, new_data):
 
     content = "\n".join(lines)
     print(f"\n📧 检测到公告变化，发送邮件...")
-    success = emailSendContent(content, title="中化供应链平台 保安/安保公告变化提醒")
+    success = emailSendContent(content, title="中化供应链平台 公告变化提醒")
     if success:
         print("✅ 邮件发送成功")
     else:
@@ -233,7 +233,7 @@ def main():
                     print(f"     链接: {item['url']}")
 
     if total_found == 0:
-        print("\n😔 最近 15 天没有找到「保安」「安保」相关公告。")
+        print(f"\n😔 最近 15 天没有找到{KEYWORDS}相关公告。")
 
     # ---- 加载旧数据用于对比 ----
     old_data = load_old_results()
